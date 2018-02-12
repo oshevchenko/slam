@@ -13,7 +13,7 @@ import Image, ImageDraw, ImageTk
 # The canvas and world extents of the scene.
 # Canvas extents in pixels, world extents in millimeters.
 canvas_extents = (600, 600)
-world_extents = (3000.0, 3000.0)
+world_extents = (4000.0, 4000.0)
 
 # The extents of the sensor canvas.
 sensor_canvas_extents = canvas_extents
@@ -248,6 +248,74 @@ class Points(DrawableObject):
                     self.cursor_objects.append(self.canvas.create_line(
                         *points, fill=self.color))
 
+class PolygonPoints(DrawableObject):
+    # Points, optionally with error ellipses.
+    def __init__(self, points, canvas, color = "red", radius = 5, ellipses = [], ellipse_factor = 1.0, background_image=None, background_d=None):
+        self.points = points
+        self.canvas = canvas
+        self.color = color
+        self.radius = radius
+        self.ellipses = ellipses
+        self.ellipse_factor = ellipse_factor
+        self.cursor_objects = []
+        self.scan_polygon = []
+        self.background_image = Image.new('RGBA', canvas_extents)
+        # global image
+        # global draw_bkg
+        # image = Image.new('RGBA', canvas_extents)
+        # draw_bkg = ImageDraw.Draw(image)
+        # draw_bkg.rectangle(((0, 00), canvas_extents), fill="black")
+        self.background_d = ImageDraw.Draw(self.background_image)
+        self.background_d.rectangle(((0, 00), canvas_extents), fill="black")
+
+    def background_draw(self):
+        pass
+
+    def draw(self, at_step):
+        if self.cursor_objects:
+            map(self.canvas.delete, self.cursor_objects)
+            self.cursor_objects = []
+        if at_step < len(self.points):
+            # self.scan_polygon=[]
+            arena_scan_image = Image.new('RGBA', canvas_extents)
+            draw = ImageDraw.Draw(arena_scan_image)
+
+            for i in xrange(len(self.points[at_step])):
+                # Draw point.
+                c = self.points[at_step][i]
+                # draw.ellipse((c[0]-2, c[1]-2, c[0]+2, c[1]+2), fill=(0,0,255,100))
+            # self.cursor_objects.append(self.canvas.create_polygon(self.points[at_step], fill="blue"))
+            # arena_scan_image = Image.new("RGB", canvas_extents, (0, 0, 0))
+
+
+            # 0,0,0 - black
+            # 255,255,255 - white
+            draw.polygon(self.points[at_step],fill=(255,255,255,20), outline = (255,255,255,20))
+
+            self.background_image.paste(arena_scan_image, (0,0), arena_scan_image)
+            global photo
+            global image
+            # photo = ImageTk.PhotoImage(self.background_image)
+            # photo = ImageTk.PhotoImage(image1)
+            # image = Image.open("slam1.bmp")
+
+            image.paste(arena_scan_image, (0,0), arena_scan_image)
+            # image = Image.blend(image, arena_scan_image, alpha=0.5)
+            # image = Image.alpha_composite(image, arena_scan_image)
+            photo = ImageTk.PhotoImage(image)
+
+            self.cursor_objects.append(self.canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo))
+            # image.save("slam1.bmp")
+
+            # draw.rectangle(((0,0),(10,10)), fill="black", outline = "blue")
+            # draw.line(cos_list, red)
+            # PIL image can be saved as .png .jpg .gif or .bmp file
+            # filename = "my_drawing.bmp"
+            filename = "my_drawing.png"
+            # arena_scan_image.save(filename)
+            self.background_image.save(filename, 'PNG')
+
+
 # Particles are like points but add a direction vector.
 class Particles(DrawableObject):
     def __init__(self, particles, canvas, color = "red", radius = 1.0,
@@ -297,6 +365,16 @@ def to_sensor_canvas(sensor_point, canvas_extents, scanner_range):
 def slider_moved(index):
     """Callback for moving the scale slider."""
     i = int(index)
+    # global photo
+    # global image
+    # photo = ImageTk.PhotoImage(self.background_image)
+    # photo = ImageTk.PhotoImage(image1)
+    # image = Image.open("slam1.bmp")
+    # photo = ImageTk.PhotoImage(image)
+
+    # self.cursor_objects.append(self.canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo))
+
+    # world_canvas.create_image(300, 300, image=photo)
     # Call all draw objects.
     for d in draw_objects:
         d.draw(i)
@@ -320,6 +398,8 @@ def add_file():
         all_file_names.append(filename)
         load_data()
 
+def save_scan_arena_bmp():
+    pass
 
 def load_data():
     global canvas_extents, sensor_canvas_extents, world_extents, max_scanner_range, num_points
@@ -329,6 +409,31 @@ def load_data():
     global draw_objects
     draw_objects = []
     scale.configure(to=logfile.size()-1)
+
+    if logfile.world_walls:
+        positions = [[to_world_canvas(pos, canvas_extents, world_extents)
+                      for pos in cylinders_one_scan]
+                      for cylinders_one_scan in logfile.world_walls]
+        # cyl_for_pos=[]
+        ppp=[]
+        test_positions=[]
+        for cylinders_one_scan in logfile.world_walls:
+            # cyl_for_pos.append(cylinders_one_scan)
+            ppp=[]
+            for pos in cylinders_one_scan:
+                ppp.append(to_world_canvas(pos, canvas_extents, world_extents))
+            test_positions.append(ppp)
+            
+        # print("ppp:")
+        # print(ppp)
+
+
+
+        # Also setup cylinders if present.
+        # Note this assumes correct aspect ratio.
+        # factor = canvas_extents[0] / world_extents[0]
+        # draw_objects.append(Points(test_positions, world_canvas, "#00f2ff", 1))
+        draw_objects.append(PolygonPoints(test_positions, world_canvas, "#00f2ff", 1))
 
     # Insert: landmarks.
     draw_objects.append(Landmarks(logfile.landmarks, world_canvas, canvas_extents, world_extents))
@@ -360,29 +465,7 @@ def load_data():
         draw_objects.append(Points(positions, world_canvas, "#DC23C5",
                                    ellipses = logfile.world_ellipses,
                                    ellipse_factor = factor))
-    if logfile.world_walls:
-        positions = [[to_world_canvas(pos, canvas_extents, world_extents)
-                      for pos in cylinders_one_scan]
-                      for cylinders_one_scan in logfile.world_walls]
-        # cyl_for_pos=[]
-        ppp=[]
-        test_positions=[]
-        for cylinders_one_scan in logfile.world_walls:
-            # cyl_for_pos.append(cylinders_one_scan)
-            ppp=[]
-            for pos in cylinders_one_scan:
-                ppp.append(to_world_canvas(pos, canvas_extents, world_extents))
-            test_positions.append(ppp)
-            
-        # print("ppp:")
-        # print(ppp)
 
-
-
-        # Also setup cylinders if present.
-        # Note this assumes correct aspect ratio.
-        # factor = canvas_extents[0] / world_extents[0]
-        draw_objects.append(Points(test_positions, world_canvas, "#00f2ff", 1))
 
     # Insert: detected cylinders, transformed into world coord system.
     if logfile.detected_cylinders and logfile.filtered_positions and \
@@ -448,7 +531,8 @@ if __name__ == '__main__':
     x_factor = 0.04
     # height stretch
     y_amplitude = 80
-    global image1
+    global image1, image
+    global draw
     image1 = Image.new("RGBA", (width, height), white)
 
     draw = ImageDraw.Draw(image1)
@@ -472,6 +556,12 @@ if __name__ == '__main__':
     cos_list.append(int(cos(x * x_factor) * y_amplitude) + center)
     draw.line([0, center, width, center], green)
     draw.line(sine_list, blue)
+    poly = []
+    poly.append(tuple([0,0]))
+    poly.append(tuple([0,10]))
+    poly.append(tuple([10,10]))
+    draw.polygon(poly,fill="black", outline = "blue")
+    # draw.rectangle(((0,0),(10,10)), fill="black", outline = "blue")
     # draw.line(cos_list, red)
     # PIL image can be saved as .png .jpg .gif or .bmp file
     # filename = "my_drawing.bmp"
@@ -487,10 +577,18 @@ if __name__ == '__main__':
     frame1.pack()
     world_canvas = Canvas(frame1,width=canvas_extents[0],height=canvas_extents[1],bg="white")
 
-    image = Image.open("slam.bmp")
+    # global image
+    # image = Image.open("slam.bmp")
+    global image
+    image = Image.new('RGBA', canvas_extents)
+    global draw_bkg
+    draw_bkg = ImageDraw.Draw(image)
+    draw_bkg.rectangle(((0, 00), canvas_extents), fill="black")
+
     global photo
-    photo = ImageTk.PhotoImage(image1)
-    world_canvas.create_image(canvas_extents[0]//2, canvas_extents[1]//2, image=photo)
+    photo = ImageTk.PhotoImage(image)
+    world_canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo)
+    # world_canvas.create_image(100, 100, image=photo)
     world_canvas.pack(side=LEFT)
     sensor_canvas = Canvas(frame1,width=sensor_canvas_extents[0],height=sensor_canvas_extents[1],bg="white")
     sensor_canvas.pack(side=RIGHT)

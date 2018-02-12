@@ -192,6 +192,7 @@ class LegoLogfile(object):
                         first_world_walls = False
                     wall = map(float, sp[2:])
                     self.world_walls.append([(wall[2*i], wall[2*i+1]) for i in range(len(wall)/2)])
+                    # self.world_walls.append([(wall[i], wall[i+1]) for i in range(len(wall)-1)])
 
 
             # PA is particles.

@@ -313,7 +313,7 @@ if __name__ == '__main__':
 
     # Arbitrary start position.
     # gym_5
-    initial_state = array([100, 1500.0, 350.0 / 180.0 * pi])
+    initial_state = array([500, 2000.0, 350.0 / 180.0 * pi])
     # gym_4
     # initial_state = array([2200, 2000.0, 250.0 / 180.0 * pi])
     # initial_state = array([1000.0, 500.0, 45.0 / 180.0 * pi])
@@ -376,7 +376,7 @@ if __name__ == '__main__':
 
         # Subsample points.
         pose = (kf.state[0], kf.state[1], kf.state[2])
-        subsampled_points = get_subsampled_points(logfile.scan_data[i])
+        subsampled_points = get_subsampled_points(logfile.scan_data[i], 1)
         world_points = [LegoLogfile.scanner_to_world(pose, c)
                         for c in subsampled_points]
         write_cylinders(f, "W P", world_points)
