@@ -269,7 +269,9 @@ class PolygonPoints(DrawableObject):
         self.background_d.rectangle(((0, 00), canvas_extents), fill="black")
 
     def background_draw(self):
-        pass
+        self.canvas.create_rectangle(((0, 0), canvas_extents), fill="black")
+
+        # pass
 
     def draw(self, at_step):
         if self.cursor_objects:
@@ -303,7 +305,8 @@ class PolygonPoints(DrawableObject):
             # image = Image.blend(image, arena_scan_image, alpha=0.5)
             # image = Image.alpha_composite(image, arena_scan_image)
             photo = ImageTk.PhotoImage(image)
-
+            
+            self.cursor_objects.append(self.canvas.create_rectangle(((0, 0), canvas_extents), fill="white"))
             self.cursor_objects.append(self.canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo))
             # image.save("slam1.bmp")
 
@@ -462,7 +465,8 @@ def load_data():
         # Also setup cylinders if present.
         # Note this assumes correct aspect ratio.
         factor = canvas_extents[0] / world_extents[0]
-        draw_objects.append(Points(positions, world_canvas, "#DC23C5",
+        # draw_objects.append(Points(positions, world_canvas, "#DC23C5",
+        draw_objects.append(Points(positions, world_canvas, "#000000",
                                    ellipses = logfile.world_ellipses,
                                    ellipse_factor = factor))
 
