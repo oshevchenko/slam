@@ -418,7 +418,7 @@ if __name__ == '__main__':
         fs.correct(cylinders)
 
         # Output particles.
-        print_particles(fs.particles, f)
+        # print_particles(fs.particles, f)
 
         # Output state estimated from all particles.
         mean = get_mean(fs.particles)

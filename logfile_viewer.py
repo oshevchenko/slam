@@ -20,7 +20,7 @@ sensor_canvas_extents = canvas_extents
 
 # The maximum scanner range used to scale scan measurement drawings,
 # in millimeters.
-max_scanner_range = 3000.0
+max_scanner_range = 4000.0
 
 class DrawableObject(object):
     def draw(self, at_step):
@@ -148,6 +148,8 @@ class ScannerData(DrawableObject):
         self.canvas = canvas
         self.canvas_extents = canvas_extents
         self.cursor_object = None
+        self.extents_x = self.canvas_extents[0]/2
+        self.extents_y = self.canvas_extents[1]/2 - 50
 
         # Convert polar scanner measurements into xy form, in canvas coords.
         # Store the result in self.scan_polygons.
@@ -167,22 +169,22 @@ class ScannerData(DrawableObject):
     def background_draw(self):
         # Draw x axis.
         self.canvas.create_line(
-            self.canvas_extents[0]/2, self.canvas_extents[1]/2,
-            self.canvas_extents[0]/2, 20,
+            self.extents_x, self.extents_y,
+            self.extents_x, 20,
             fill="black")
         self.canvas.create_text(
-            self.canvas_extents[0]/2 + 10, 20, text="x" )
+            self.extents_x + 10, 20, text="x" )
         # Draw y axis.
         self.canvas.create_line(
-            self.canvas_extents[0]/2, self.canvas_extents[1]/2,
-            20, self.canvas_extents[1]/2,
+            self.extents_x, self.extents_y,
+            20, self.extents_y,
             fill="black")
         self.canvas.create_text(
-            20, self.canvas_extents[1]/2 - 10, text="y" )
+            20, self.extents_y - 10, text="y" )
         # Draw big disk in the scan center.
         self.canvas.create_oval(
-            self.canvas_extents[0]/2-20, self.canvas_extents[1]/2-20,
-            self.canvas_extents[0]/2+20, self.canvas_extents[1]/2+20,
+            self.extents_x-20, self.extents_y-20,
+            self.extents_x+20, self.extents_y+20,
             fill="gray", outline="")
 
     def draw(self, at_step):
@@ -362,7 +364,7 @@ def to_sensor_canvas(sensor_point, canvas_extents, scanner_range):
     """Transforms a point from sensor coordinates to sensor canvas coord system."""
     scale = canvas_extents[0] / 2.0 / scanner_range
     x = int(canvas_extents[0] / 2.0 - sensor_point[1] * scale)
-    y = int(canvas_extents[1] / 2.0 - 1 - sensor_point[0] * scale)
+    y = int(canvas_extents[1] / 2.0 - 50 - 1 - sensor_point[0] * scale)
     return (x, y)
 
 def slider_moved(index):
@@ -594,8 +596,8 @@ if __name__ == '__main__':
     world_canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo)
     # world_canvas.create_image(100, 100, image=photo)
     world_canvas.pack(side=LEFT)
-    sensor_canvas = Canvas(frame1,width=sensor_canvas_extents[0],height=sensor_canvas_extents[1],bg="white")
-    sensor_canvas.pack(side=RIGHT)
+    sensor_canvas = Canvas(frame1,width=sensor_canvas_extents[0],height=sensor_canvas_extents[1]/2,bg="white")
+    sensor_canvas.pack(anchor=N,side=RIGHT)
     scale = Scale(root, orient=HORIZONTAL, command = slider_moved)
     scale.pack(fill=X)
     info = Label(root)
