@@ -5,7 +5,7 @@
 #
 # slam_10_e_correction
 # Claus Brenner, 20.02.2013
-from lego_robot_g import *
+from lego_robot import *
 from slam_g_library import get_cylinders_from_scan, write_cylinders,\
      write_error_ellipses, get_mean, get_error_ellipse_and_heading_variance,\
      print_particles, filter1, get_subsampled_points
