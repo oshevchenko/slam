@@ -2,3 +2,4 @@
 *.jpg
 *.png
 ekf_slam_correction.txt
+fast_slam_correction.txt

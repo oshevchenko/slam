@@ -1,6 +1,6 @@
 # This file contains helper functions for Unit G of the SLAM lecture.
 # Claus Brenner, 27 JAN 2013
-from math import sin, cos, atan2, sqrt, pi
+from math import sin, cos, atan2, sqrt, pi, tan
 from lego_robot import LegoLogfile
 import numpy as np
 
@@ -83,7 +83,8 @@ def compute_derivative(scan, min_dist):
         l2 = scan[i-2*h]
         if l1 > min_dist and r2 > min_dist:
             # derivative = (-r2+8*r1-8*l1+l2)/(12*h)
-            derivative = (-1*scan[i-3]+9*scan[i-2]-45*scan[i-1]+0*scan[i+0]+45*scan[i+1]-9*scan[i+2]+1*scan[i+3])/(60*1.0*h**1)
+            derivative = (-1*scan[i-3]+9*scan[i-2]-45*scan[i-1]+0*scan[i+0]+
+                45*scan[i+1]-9*scan[i+2]+1*scan[i+3])/(60*1.0*h**1)
             jumps.append(derivative)
         else:
             jumps.append(0)
@@ -116,7 +117,8 @@ def find_cylinders_old(scan, scan_derivative, jump, min_dist):
             sum_depth += scan[i]
             rays += 1
     return cylinder_list
-def find_cylinders(scan, scan_derivative, jump, min_dist):
+def find_cylinders(scan, scan_derivative, jump, min_dist, points_per_scan,
+                                                            max_cylinder_d):
     cylinder_list = []
     on_cylinder = False
     sum_ray, sum_depth, rays = 0.0, 0.0, 0
@@ -129,7 +131,12 @@ def find_cylinders(scan, scan_derivative, jump, min_dist):
         elif scan_derivative[i] == 1:
             # Save cylinder if there was one.
             if on_cylinder and rays:
-                cylinder_list.append((sum_ray/rays, sum_depth/rays))
+                sigma = (2*pi / points_per_scan) * rays
+                D = sum_depth/rays
+                d = 2*D*tan(sigma/2)
+                # print ("diameter %d "%(d))
+                if (d < max_cylinder_d):
+                    cylinder_list.append((sum_ray/rays, sum_depth/rays))
             on_cylinder = False
         # Always add point, if it is a valid measurement.
         elif scan[i] > min_dist:
@@ -145,7 +152,8 @@ def find_cylinders(scan, scan_derivative, jump, min_dist):
 # The result is modified from previous versions: it returns a list of
 # tuples of two numpy arrays, the first being (distance, bearing), the second
 # being (x, y) in the scanner's coordinate system.
-def get_cylinders_from_scan(scan, jump, min_dist, cylinder_offset):
+def get_cylinders_from_scan(scan, jump, min_dist, cylinder_offset,
+                                points_per_scan, max_cylinder_d):
 
     scan_f = filter2(scan)
 
@@ -161,7 +169,7 @@ def get_cylinders_from_scan(scan, jump, min_dist, cylinder_offset):
     start_stop = []
     start_stop = convert_to_start_stop(mul_der, jump)
     cylinders = find_cylinders(scan_f, start_stop, jump,
-                               min_dist)
+                               min_dist, points_per_scan, max_cylinder_d)
 
     # der = compute_derivative(scan, min_dist)
     # cylinders = find_cylinders(scan, der, jump, min_dist)
@@ -223,7 +231,8 @@ def convert_to_start_stop(mul_der, threshold):
             if on_vpadina:
                 stop_vpadina = i
                 if (rays_vpadina > 4):
-                    # print("i %d end vpadina rays vpadina %d" %(i, rays_vpadina))
+                    # print("i %d end vpadina rays vpadina %d" %(i,
+                    #                                             rays_vpadina))
                     vpadina_list.append((start_vpadina+stop_vpadina)/2)
                 on_vpadina = False
             continue

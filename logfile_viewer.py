@@ -13,7 +13,7 @@ import Image, ImageDraw, ImageTk
 # The canvas and world extents of the scene.
 # Canvas extents in pixels, world extents in millimeters.
 canvas_extents = (600, 600)
-world_extents = (4000.0, 4000.0)
+world_extents = (6000.0, 6000.0)
 
 # The extents of the sensor canvas.
 sensor_canvas_extents = canvas_extents

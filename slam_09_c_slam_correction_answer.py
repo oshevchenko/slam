@@ -336,7 +336,7 @@ if __name__ == '__main__':
     # logfile.read("robo_scan_777_256.txt")
 
     logfile.read("gym_5/output")
-    logfile.read("gym_5/robo_scan_777.txt")
+    logfile.read("gym_5/robo_scan_777_180.txt")
 
     # logfile.read("gym_4/output.txt")
     # logfile.read("gym_4/robo_scan_777_186.txt")

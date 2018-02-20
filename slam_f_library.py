@@ -133,6 +133,11 @@ def find_cylinders(scan, scan_derivative, jump, min_dist):
         elif scan_derivative[i] == 1:
             # Save cylinder if there was one.
             if on_cylinder and rays:
+                sigma = (2*pi / 660) * rays
+                D = sum_depth/rays
+                d = 2*D*tan(sigma/2)
+                print("d=%d"%d)
+
                 cylinder_list.append((sum_ray/rays, sum_depth/rays))
             on_cylinder = False
         # Always add point, if it is a valid measurement.

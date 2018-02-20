@@ -360,16 +360,18 @@ if __name__ == '__main__':
     # robot_width = 155.0
     scanner_displacement = 0
     ticks_to_mm = 1.037
-    robot_width = 200
+    robot_width = 300
 
     # Cylinder extraction and matching constants.
     minimum_valid_distance = 20.0
     depth_jump = 70.0
     cylinder_offset = 5.0
+    points_per_scan = 1000
+    max_cylinder_d = 250
 
     # Filter constants.
-    control_motion_factor = 0.35  # Error in motor control.
-    control_turn_factor = 0.8  # Additional error due to slip when turning.
+    control_motion_factor = 0.7  # Error in motor control.
+    control_turn_factor = 2.0  # Additional error due to slip when turning.
     measurement_distance_stddev = 200.0  # Distance measurement error of cylinders.
     measurement_angle_stddev = 15.0 / 180.0 * pi  # Angle measurement error.
     minimum_correspondence_likelihood = 0.001  # Min likelihood of correspondence.
@@ -378,7 +380,13 @@ if __name__ == '__main__':
     number_of_particles = 50
     # initial_state = array([500, 2000.0, 350.0 / 180.0 * pi])
     # start_state = np.array([500.0, 0.0, 45.0 / 180.0 * pi])
-    start_state = np.array([500.0, 2000.0, 350.0 / 180.0 * pi])
+    # gym_5
+    # start_state = np.array([500.0, 2000.0, 350.0 / 180.0 * pi])
+    # gym_4
+    # start_state = np.array([2700, 2500.0, 250.0 / 180.0 * pi])
+    # test_8
+    start_state = np.array([2000, 2000.0, 325.0 / 180.0 * pi])
+
     initial_particles = [copy.copy(Particle(start_state))
                          for _ in xrange(number_of_particles)]
 
@@ -394,13 +402,19 @@ if __name__ == '__main__':
     logfile = LegoLogfile()
     # logfile.read("robot4_motors.txt")
     # logfile.read("robot4_scan.txt")
-    logfile.read("output.txt")
-    logfile.read("robo_scan_777.txt")
+    # logfile.read("output.txt")
+    # logfile.read("robo_scan_777.txt")
 
+    # logfile.read("gym_4/output.txt")
+    # logfile.read("gym_4/robo_scan_777_186.txt")
+    logfile.read("test_8/output")
+    logfile.read("test_8/robo_scan_777.txt")
+    
     # Loop over all motor tick records.
     # This is the FastSLAM filter loop, with prediction and correction.
     f = open("fast_slam_correction.txt", "w")
-    for i in xrange(len(logfile.motor_ticks)):
+    for i in xrange(len(logfile.motor_ticks)-5):
+        print("point %d of %d"%(i,len(logfile.motor_ticks)))
         # if (i%10)==0:
         #     print "Motor tick: ", i
         # Prediction.
@@ -411,7 +425,8 @@ if __name__ == '__main__':
 
         # Correction.
         cylinders = get_cylinders_from_scan(logfile.scan_data[i], depth_jump,
-            minimum_valid_distance, cylinder_offset)
+            minimum_valid_distance, cylinder_offset, points_per_scan,
+            max_cylinder_d)
         write_cylinders(f, "D C", [(obs[1][0], obs[1][1])
                                    for obs in cylinders])
 
