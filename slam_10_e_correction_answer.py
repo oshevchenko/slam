@@ -9,11 +9,12 @@ from lego_robot import *
 from slam_g_library import get_cylinders_from_scan, write_cylinders,\
      write_error_ellipses, get_mean, get_error_ellipse_and_heading_variance,\
      print_particles, filter1, get_subsampled_points
+     
 from math import sin, cos, pi, atan2, sqrt, exp
 import copy
 import random
 import numpy as np
-
+from slam_ransac import *
 
 class Particle:
     def __init__(self, pose):
@@ -315,7 +316,7 @@ class FastSLAM:
             # Loop over all measurements.
             number_of_landmarks = p.number_of_landmarks()
             weight = 1.0
-            for measurement, measurement_in_scanner_system in cylinders:
+            for measurement, measurement_in_scanner_system, indxs in cylinders:
                 weight *= p.update_particle(
                     measurement, measurement_in_scanner_system,
                     number_of_landmarks,
@@ -413,6 +414,7 @@ if __name__ == '__main__':
     # Loop over all motor tick records.
     # This is the FastSLAM filter loop, with prediction and correction.
     f = open("fast_slam_correction.txt", "w")
+    f_sub_scans = open("scans_without_landmarks.txt", "w")
     for i in xrange(len(logfile.motor_ticks)-5):
         print("point %d of %d"%(i,len(logfile.motor_ticks)))
         # if (i%10)==0:
@@ -429,6 +431,15 @@ if __name__ == '__main__':
             max_cylinder_d)
         write_cylinders(f, "D C", [(obs[1][0], obs[1][1])
                                    for obs in cylinders])
+        ransac = Ransac(logfile.scan_data[i], cylinders)
+        scans_without_landmarks = ransac.scan
+        points = ransac.get_random_points_from_sector(0, 5)
+        print(points)
+        # scans_without_landmarks = get_scans_without_landmarks(
+        #     logfile.scan_data[i], cylinders)
+        # print(scans_without_landmarks)
+        write_cylinders(f_sub_scans, "SC", [(obs[0], obs[1])
+                                   for obs in scans_without_landmarks])
 
         fs.correct(cylinders)
 
@@ -469,3 +480,4 @@ if __name__ == '__main__':
                              fs.particles[output_particle].landmark_covariances)
 
     f.close()
+    f_sub_scans.close()

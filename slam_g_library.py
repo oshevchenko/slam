@@ -122,12 +122,15 @@ def find_cylinders(scan, scan_derivative, jump, min_dist, points_per_scan,
     cylinder_list = []
     on_cylinder = False
     sum_ray, sum_depth, rays = 0.0, 0.0, 0
+    start_cylinder_index = 0
+    stop_cylinder_index = 0
 
     for i in xrange(len(scan_derivative)):
         if scan_derivative[i] == -1:
             # Start a new cylinder, independent of on_cylinder.
             on_cylinder = True
             sum_ray, sum_depth, rays = 0.0, 0.0, 0
+            start_cylinder_index = i
         elif scan_derivative[i] == 1:
             # Save cylinder if there was one.
             if on_cylinder and rays:
@@ -136,7 +139,10 @@ def find_cylinders(scan, scan_derivative, jump, min_dist, points_per_scan,
                 d = 2*D*tan(sigma/2)
                 # print ("diameter %d "%(d))
                 if (d < max_cylinder_d):
-                    cylinder_list.append((sum_ray/rays, sum_depth/rays))
+                    stop_cylinder_index = i
+                    cylinder_list.append(
+                        (np.array([sum_ray/rays, sum_depth/rays]),
+                        np.array([start_cylinder_index, stop_cylinder_index])))
             on_cylinder = False
         # Always add point, if it is a valid measurement.
         elif scan[i] > min_dist:
@@ -176,11 +182,11 @@ def get_cylinders_from_scan(scan, jump, min_dist, cylinder_offset,
     result = []
     for c in cylinders:
         # Compute the angle and distance measurements.
-        bearing = LegoLogfile.beam_index_to_angle(c[0])
-        distance = c[1] + cylinder_offset
+        bearing = LegoLogfile.beam_index_to_angle(c[0][0])
+        distance = c[0][1] + cylinder_offset
         # Compute x, y of cylinder in the scanner system.
         x, y = distance*cos(bearing), distance*sin(bearing)
-        result.append( (np.array([distance, bearing]), np.array([x, y])) )
+        result.append( (np.array([distance, bearing]), np.array([x, y]), c[1]))
     return result
 
 def filterxxx(scan):

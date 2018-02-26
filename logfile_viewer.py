@@ -451,6 +451,14 @@ def load_data():
     # Insert: scanner data.
     draw_objects.append(ScannerData(logfile.scan_data, sensor_canvas,
         sensor_canvas_extents, max_scanner_range))
+    # draw_objects.append(ScannerData(logfile.scan_data_without_landmarks, world_canvas,
+    #     canvas_extents, max_scanner_range))
+    # >>>>>>>>>>>>>
+    if logfile.scan_data_without_landmarks:
+        positions = [[to_world_canvas(tuple((pos[0] + world_extents[0]/2, pos[1] + world_extents[1]/2) ), canvas_extents, world_extents)
+                     for pos in cylinders_one_scan ]
+                     for cylinders_one_scan in logfile.scan_data_without_landmarks ]
+        draw_objects.append(Points(positions, world_canvas, "#88FF88", 1))
 
     # Insert: detected cylinders, in scanner coord system.
     if logfile.detected_cylinders:

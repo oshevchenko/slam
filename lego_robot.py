@@ -24,6 +24,7 @@ class LegoLogfile(object):
     def __init__(self):
         self.reference_positions = []
         self.scan_data = []
+        self.scan_data_without_landmarks = []
         self.pole_indices = []
         self.motor_ticks = []
         self.filtered_positions = []
@@ -45,6 +46,7 @@ class LegoLogfile(object):
         # but only replace those lists that are present in the data.
         first_reference_positions = True
         first_scan_data = True
+        first_scan_data_without_landmarks = True
         first_pole_indices = True
         first_motor_ticks = True
         first_filtered_positions = True
@@ -82,6 +84,18 @@ class LegoLogfile(object):
                     self.scan_data.append(tuple(map(int, sp[3:])))
                 else:
                     self.scan_data.append(tuple(map(int, sp[2:])))
+
+            elif sp[0] == 'SC':
+                if first_scan_data_without_landmarks:
+                    self.scan_data_without_landmarks = []
+                    first_scan_data_without_landmarks = False
+                i = 1
+                scan_list = []
+                while i < len(sp):
+                    scan_list.append(tuple(map(lambda x: int(float(x)), sp[i:i+2])))
+                    i += 2
+                self.scan_data_without_landmarks.append(scan_list)
+
 
             # I is indices of poles in the scan.
             # The indices are given in scan order (counterclockwise).
