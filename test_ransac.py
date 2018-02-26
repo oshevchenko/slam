@@ -38,14 +38,16 @@ if __name__ == '__main__':
     logfile.read("test_8/robo_scan_777.txt")
     # for i in xrange(len(logfile.motor_ticks)-5):
     global ransac
-    for i in xrange(170, 171):
+    # for i in xrange(170, 171):
     # for i in xrange(100, 101):
     # for i in xrange(97, 98):
+    # for i in xrange(56, 57):
+    for i in xrange(0, 1):
         intersection_points=[]
         cylinders = get_cylinders_from_scan(logfile.scan_data[i], depth_jump,
             minimum_valid_distance, cylinder_offset, points_per_scan,
             max_cylinder_d)
-        ransac = Ransac(logfile.scan_data[i], cylinders)
+        ransac = Ransac(logfile.scan_data[i], cylinders, points_per_sector = 33)
         points = ransac.scan
         scatter([c[0] for c in points], [c[1] for c in points],
             c='r', s=50)
@@ -60,20 +62,34 @@ if __name__ == '__main__':
         ransac.try_merge_sectors()
         for sector in ransac.sectors:
             # print("+++")
+            # if (sector.valid and sector.best_inliners_len > 30):
             if (sector.valid):
+                # print(sector.best_inliners_len)
+
+
                 scatter([c[0] for c in sector.best_inliners], [c[1] for c in sector.best_inliners],
                     c='b', s=5)
 
-                P = plot_line(sector.best_line, -2000, 4000, -2000, 4000, 5)
-                plot(P[0], P[1])
+                # P = plot_line(sector.best_line, -2000, 4000, -2000, 4000, 5)
+                # plot(P[0], P[1])
 
                 points_left.append(sector.point_l)
                 points_right.append(sector.point_r)
+
+        for line in ransac.best_lines:
+            if (line.n_inliners > 30):
+                P = plot_line(line.best_line, -2000, 4000, -2000, 4000, 5)
+                plot(P[0], P[1])
+        scatter([c[0] for c in ransac.landmarks], [c[1] for c in ransac.landmarks],
+                    c='b', s=200)
+
+            # print(line.n_inliners)
+
         # print(points_left)
-        scatter([c[0] for c in points_left], [c[1] for c in points_left],
-                c='g', s=200)
-        scatter([c[0] for c in points_right], [c[1] for c in points_right],
-                c='r', s=200)
+        # scatter([c[0] for c in points_left], [c[1] for c in points_left],
+        #         c='g', s=200)
+        # scatter([c[0] for c in points_right], [c[1] for c in points_right],
+        #         c='r', s=200)
 
         # angle = angle_line_to_line(ransac.sectors[0].best_line, ransac.sectors[1].best_line)
         # print(angle)

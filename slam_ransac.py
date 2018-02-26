@@ -1,6 +1,8 @@
 from math import sin, cos, atan2, sqrt, pi, tan, hypot, acos
 from lego_robot import LegoLogfile
 import numpy as np
+import itertools
+import random
 
 def least_squares_line(points):
     mean_x, mean_y = 0.0, 0.0
@@ -52,8 +54,9 @@ def angle_line_to_line(L1, L2):
     
     if denom != 0:
         angle = acos((A1*A2+B1*B2)/denom)
-        angle = (angle + pi) % (2*pi) - pi
-        return angle
+        # angle = (angle + pi) % (2*pi) - pi
+        angle = (angle + pi/2) % (pi) - pi/2
+        return abs(angle)
     else:
         return 0
 
@@ -90,27 +93,45 @@ def plot_ray(ray, n_points):
 
     return ((X,Y))
 
+class BestLine:
+    def __init__(self, line, n_inliners):
+        self.best_line = line
+        self.n_inliners = n_inliners
 
-# class SectorInliners:
-#     def __init__(self, inliners, rays, inline_threshold = 50, attempts = 10, valid_threshold = 0.8, from_inliners = False):
-#             self.scan=[]
-#             self.best_inliners = inliners
-#             self.best_inliners_len = len(self.best_inliners)
-#             self.valid_threshold = 0
+    def ProcessScan(self, scan, threshold):
+        self.n_inliners = 0
+        processed_scan = []
+        for offset in xrange(len(scan)):
+            point = scan[offset]
+            distance = distance_point_to_line(point, self.best_line)
+            if distance < threshold:
+                self.n_inliners += 1
+            else:
+                processed_scan.append(point)
+        return processed_scan
 
-class Sector:
-    def __init__(self, scan, rays, inline_threshold = 50, attempts = 10, valid_threshold = 0.8, from_inliners = False):
-        if from_inliners:
-            self.scan=[]
-            self.best_inliners = scan
-            self.best_inliners_len = len(self.best_inliners)
-            self.valid_threshold = 0
-        else:    
-            self.scan = scan
-            self.best_inliners = []
-            self.best_inliners_len = 0
-            self.scan_len = len(self.scan)
-            self.valid_threshold = self.scan_len * valid_threshold
+
+class SectorInliners:
+    def __init__(self, inliners, rays):
+        self.best_inliners = inliners
+        self.best_inliners_len = len(self.best_inliners)
+        self.ray_l, self.ray_r = rays
+        self.FindBestLine()
+
+    def FindBestLine(self):
+        self.valid = True
+        self.best_line = least_squares_line(self.best_inliners)
+        self.point_l = intersection(self.best_line, self.ray_l)
+        self.point_r = intersection(self.best_line, self.ray_r)
+
+
+class Sector(SectorInliners):
+    def __init__(self, scan, rays, inline_threshold = 60, attempts = 10, valid_threshold = 0.8):
+        self.scan = scan
+        self.best_inliners = []
+        self.best_inliners_len = 0
+        self.scan_len = len(self.scan)
+        self.valid_threshold = self.scan_len * valid_threshold
         self.ray_l, self.ray_r = rays
         self.inline_threshold = inline_threshold
 
@@ -121,27 +142,17 @@ class Sector:
         self.point_r = []
         self.valid = False
 
-        if not from_inliners:
-            for j in xrange(self.attempts):
-                points = self.get_random_points(10)
-                line = least_squares_line(points)
-                inliners = self.get_inliners(line, self.inline_threshold)
-                if (len(inliners) > self.best_inliners_len):
-                    self.best_inliners_len = len(inliners)
-                    self.best_inliners = inliners
+        for j in xrange(self.attempts):
+            points = random.sample(self.scan, 5)
+            line = least_squares_line(points)
+            inliners = self.get_inliners(line, self.inline_threshold)
+            if (len(inliners) > self.best_inliners_len):
+                self.best_inliners_len = len(inliners)
+                self.best_inliners = inliners
 
         if (self.best_inliners_len > self.valid_threshold):
-            self.valid = True
-            self.best_line = least_squares_line(self.best_inliners)
-            self.point_l = intersection(self.best_line, self.ray_l)
-            self.point_r = intersection(self.best_line, self.ray_r)
+            self.FindBestLine()
 
-    def get_random_points (self, n_points):
-        X = np.random.randint(0, high=self.scan_len, size=n_points)
-        points = []
-        for x in X:
-            points.append(self.scan[x])
-        return points
     def get_inliners(self, line, threshold):
         inliners = []
         for offset in xrange(self.scan_len):
@@ -158,12 +169,16 @@ class Sector:
 
 class Ransac:
     def __init__(self, scan, cylinders, points_per_sector = 66,
-                                                            min_distance = 300):
+                                    min_distance = 300, inline_threshold=45):
         self.points_per_sector = points_per_sector
         self.scan = []
         self.sector_rays = []
         self.min_distance = min_distance
         self.n_valid_sectors = 0
+        self.valid_sectors = []
+        self.best_lines = []
+        self.inline_threshold = inline_threshold
+        self.landmarks = []
 
         offset = 0
         self.sectors = []
@@ -180,15 +195,18 @@ class Ransac:
 
             sec_points = self.get_sector_scans_without_landmarks (scan, cylinders,
                                                                          offset)
-            for point in sec_points:
-                self.scan.append(point)
+            self.scan += sec_points
+            # for point in sec_points:
+            #     self.scan.append(point)
 
             offset += self.points_per_sector
-            sector = Sector(sec_points, (ray_l, ray_r))
+            sector = Sector(sec_points, (ray_l, ray_r), inline_threshold=60)
             if sector.valid:
                 self.n_valid_sectors += 1
             self.sectors.append(sector)
-        print(self.n_valid_sectors)
+
+        self.scan_len = len(self.scan)
+        # print(self.n_valid_sectors)
 
 
         bearing = LegoLogfile.beam_index_to_angle(offset)
@@ -221,69 +239,65 @@ class Ransac:
     def try_merge_sectors (self):
         n_valid_sectors_new = 0
         new_sectors =[]
-        candidate_inliners = []
-        candidate_rays = []
+
         if self.n_valid_sectors < 2:
             return 0
 
         while self.n_valid_sectors != n_valid_sectors_new:
             self.n_valid_sectors = n_valid_sectors_new
             n_valid_sectors_new = 0
-            sector_last_candidate = None
-            n_candidate_to_merge = 0
+            candidate = None 
+
             new_sectors =[]
             for sector in self.sectors:
-                if sector.valid and n_candidate_to_merge == 0:
-                    n_candidate_to_merge = 1
-                    candidate_inliners = sector.best_inliners
-                    candidate_rays = (sector.ray_l, sector.ray_r)
-                    sector_last_candidate = sector
-                elif sector.valid and n_candidate_to_merge != 0:
-                    distance = distance_point_to_point(sector_last_candidate.point_l, sector.point_r)
-                    angle = angle_line_to_line(sector_last_candidate.best_line, sector.best_line)
+                if sector.valid and candidate == None:
+                    candidate = sector
+                elif sector.valid and candidate != None:
+                    distance = distance_point_to_point(candidate.point_l, sector.point_r)
+                    angle = angle_line_to_line(candidate.best_line, sector.best_line)
                     if (distance < 100  and angle < 0.2):
-                        print("we are about to merge sectors len: %d"%len(candidate_inliners))
-                        print candidate_rays
-                        n_candidate_to_merge += 1
-                        candidate_inliners += sector.best_inliners
-                        candidate_rays = (sector.ray_l, candidate_rays[1])
-                        print("we are about to merge sectors len: %d"%len(candidate_inliners))
-                        print candidate_rays
-                        sector_last_candidate = Sector(candidate_inliners, candidate_rays, from_inliners=True)
-                        candidate_inliners = sector_last_candidate.best_inliners
-                        candidate_rays = (sector_last_candidate.ray_l, sector_last_candidate.ray_r)
+                        candidate.best_inliners += sector.best_inliners
+                        candidate = SectorInliners(candidate.best_inliners, (sector.ray_l, candidate.ray_r))
                     else:
-                        new_sectors.append(sector_last_candidate)
+                        new_sectors.append(candidate)
                         n_valid_sectors_new += 1
-                        # n_candidate_to_merge  == 1
-                        sector_last_candidate = sector
-                        candidate_inliners = sector.best_inliners
-                        candidate_rays = (sector.ray_l, sector.ray_r)
-                    # print(distance, angle)
-                    # sector_last_candidate = sector
+                        candidate = sector
                 elif not sector.valid:
-                    if n_candidate_to_merge != 0:
-                        new_sectors.append(sector_last_candidate)
+                    if candidate != None:
+                        new_sectors.append(candidate)
                         n_valid_sectors_new += 1
-                    n_candidate_to_merge = 0
+                        candidate = None
                     new_sectors.append(sector)
-            if n_candidate_to_merge != 0:
-                new_sectors.append(sector_last_candidate)
+            if candidate != None:
+                new_sectors.append(candidate)
                 n_valid_sectors_new += 1
             self.sectors = new_sectors
-            break
-        print("n_valid_sectors_new %d"%n_valid_sectors_new)
+            # print("self.n_valid_sectors %d n_valid_sectors_new %d"%(self.n_valid_sectors,n_valid_sectors_new))
+
+        for sector in self.sectors:
+            if sector.valid:
+                self.best_lines.append(BestLine(sector.best_line, sector.best_inliners_len))
+                
+
+        self.best_lines = sorted(self.best_lines, key = lambda x: x.n_inliners, reverse=True)
+        for line in self.best_lines:
+            self.scan = line.ProcessScan(self.scan, self.inline_threshold)
+        new_lines = []
+        for line in self.best_lines:
+            if (line.n_inliners > 30):
+                new_lines.append(line)
+            self.best_lines = new_lines
+        for subset in itertools.combinations(self.best_lines, 2):
+            angle = angle_line_to_line(subset[0].best_line, subset[1].best_line)
+            print("angle",angle)
+            if (angle > 0.43):
+                self.landmarks.append(intersection(subset[0].best_line, subset[1].best_line))
+
+        print(self.landmarks)
+
+
+
+
+            # break
+            
     
-
-
-
-
-                    # candidate_inliners.append(sector.best_inliners)
-                    # candidate_rays.append(sector.rays)
-
-
-
-
-
-
-
