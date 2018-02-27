@@ -142,6 +142,10 @@ class Sector(SectorInliners):
         self.point_r = []
         self.valid = False
 
+
+        if (self.scan_len < 10):
+            return
+
         for j in xrange(self.attempts):
             points = random.sample(self.scan, 5)
             line = least_squares_line(points)
@@ -169,7 +173,8 @@ class Sector(SectorInliners):
 
 class Ransac:
     def __init__(self, scan, cylinders, points_per_sector = 66,
-                                    min_distance = 300, inline_threshold=45):
+                                    min_distance = 300, inline_threshold=45,
+                                    attempts = 10, valid_threshold = 0.8):
         self.points_per_sector = points_per_sector
         self.scan = []
         self.sector_rays = []
@@ -179,6 +184,7 @@ class Ransac:
         self.best_lines = []
         self.inline_threshold = inline_threshold
         self.landmarks = []
+        self.walls = []
 
         offset = 0
         self.sectors = []
@@ -200,7 +206,8 @@ class Ransac:
             #     self.scan.append(point)
 
             offset += self.points_per_sector
-            sector = Sector(sec_points, (ray_l, ray_r), inline_threshold=60)
+            sector = Sector(sec_points, (ray_l, ray_r), inline_threshold=self.inline_threshold,
+                attempts=attempts, valid_threshold=valid_threshold)
             if sector.valid:
                 self.n_valid_sectors += 1
             self.sectors.append(sector)
@@ -236,6 +243,16 @@ class Ransac:
                 x, y = distance*cos(bearing), distance*sin(bearing)
                 result.append(np.array([x, y]))
         return result
+    @staticmethod
+    def h(state, landmark, scanner_displacement):
+        """Measurement function. Takes a (x, y, theta) state and a (x, y)
+           landmark, and returns the corresponding (range, bearing)."""
+        dx = landmark[0] - (state[0] + scanner_displacement * cos(state[2]))
+        dy = landmark[1] - (state[1] + scanner_displacement * sin(state[2]))
+        r = sqrt(dx * dx + dy * dy)
+        alpha = (atan2(dy, dx) - state[2] + pi) % (2*pi) - pi
+        return np.array([r, alpha])
+
     def try_merge_sectors (self):
         n_valid_sectors_new = 0
         new_sectors =[]
@@ -284,16 +301,22 @@ class Ransac:
             self.scan = line.ProcessScan(self.scan, self.inline_threshold)
         new_lines = []
         for line in self.best_lines:
-            if (line.n_inliners > 30):
+            if (line.n_inliners > 50):
                 new_lines.append(line)
-            self.best_lines = new_lines
+        self.best_lines = new_lines
         for subset in itertools.combinations(self.best_lines, 2):
             angle = angle_line_to_line(subset[0].best_line, subset[1].best_line)
-            print("angle",angle)
+            # print("angle",angle)
             if (angle > 0.43):
-                self.landmarks.append(intersection(subset[0].best_line, subset[1].best_line))
+                x,y = intersection(subset[0].best_line, subset[1].best_line)
+                # result.append( (np.array([distance, bearing]), np.array([x, y]), c[1]))
+                angle_coordinates = self.h((0,0,0), (x,y), 0)
+                self.landmarks.append( (angle_coordinates, np.array([x, y]), (0.0,0.0)))
+        for line in self.best_lines:
+            # if (line.n_inliners > 30):
+            self.walls.append(plot_line(line.best_line, -2000, 4000, -2000, 4000, 2))
 
-        print(self.landmarks)
+        # print(self.landmarks)
 
 
 

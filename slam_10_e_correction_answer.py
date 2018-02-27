@@ -8,7 +8,7 @@
 from lego_robot import *
 from slam_g_library import get_cylinders_from_scan, write_cylinders,\
      write_error_ellipses, get_mean, get_error_ellipse_and_heading_variance,\
-     print_particles, filter1, get_subsampled_points
+     print_particles, filter1, get_subsampled_points, write_walls
      
 from math import sin, cos, pi, atan2, sqrt, exp
 import copy
@@ -429,18 +429,24 @@ if __name__ == '__main__':
         cylinders = get_cylinders_from_scan(logfile.scan_data[i], depth_jump,
             minimum_valid_distance, cylinder_offset, points_per_scan,
             max_cylinder_d)
-        write_cylinders(f, "D C", [(obs[1][0], obs[1][1])
-                                   for obs in cylinders])
-        ransac = Ransac(logfile.scan_data[i], cylinders)
-        scans_without_landmarks = ransac.scan
-        points = ransac.get_random_points_from_sector(0, 5)
-        print(points)
+
+        ransac = Ransac(logfile.scan_data[i], cylinders, points_per_sector = 33,
+            min_distance = 300, inline_threshold=45,
+            attempts = 10, valid_threshold = 0.8)
+        ransac.try_merge_sectors()
+
         # scans_without_landmarks = get_scans_without_landmarks(
         #     logfile.scan_data[i], cylinders)
         # print(scans_without_landmarks)
-        write_cylinders(f_sub_scans, "SC", [(obs[0], obs[1])
-                                   for obs in scans_without_landmarks])
+        # write_cylinders(f_sub_scans, "SC", [(obs[0], obs[1])
+        #                            for obs in ransac.landmarks])
+        cylinders += ransac.landmarks
 
+        write_cylinders(f, "D C", [(obs[1][0], obs[1][1])
+                                   for obs in cylinders])
+
+        write_walls(f, "D W", [(W[0][0], W[1][0], W[0][1], W[1][1])
+                                            for W in ransac.walls])
         fs.correct(cylinders)
 
         # Output particles.

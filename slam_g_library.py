@@ -27,6 +27,16 @@ def write_cylinders(file_desc, line_header, cylinder_list):
         print >> file_desc, "%.1f %.1f" % tuple(c),
     print >> file_desc
 
+# Utility to write a list of walls to a given file.
+# Line header defines the start of each line, e.g. "D W" for a detected
+# wall
+def write_walls(file_desc, line_header, walls_list):
+    print >> file_desc, line_header,
+    for wall in walls_list:
+        print >> file_desc, "%.1f %.1f %.1f %.1f" % tuple(wall),
+    print >> file_desc
+
+
 # Utility to write a list of error ellipses to (one line of) a given file.
 # Line header defines the start of each line.
 # Note that in contrast to previous versions, this takes a list of covariance

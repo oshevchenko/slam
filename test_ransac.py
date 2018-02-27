@@ -42,12 +42,15 @@ if __name__ == '__main__':
     # for i in xrange(100, 101):
     # for i in xrange(97, 98):
     # for i in xrange(56, 57):
-    for i in xrange(0, 1):
+    # for i in xrange(0, 1):
+    for i in xrange(25, 26):
         intersection_points=[]
         cylinders = get_cylinders_from_scan(logfile.scan_data[i], depth_jump,
             minimum_valid_distance, cylinder_offset, points_per_scan,
             max_cylinder_d)
-        ransac = Ransac(logfile.scan_data[i], cylinders, points_per_sector = 33)
+        ransac = Ransac(logfile.scan_data[i], cylinders, points_per_sector = 33,
+            min_distance = 300, inline_threshold=45,
+            attempts = 10, valid_threshold = 0.8)
         points = ransac.scan
         scatter([c[0] for c in points], [c[1] for c in points],
             c='r', s=50)
@@ -76,11 +79,15 @@ if __name__ == '__main__':
                 points_left.append(sector.point_l)
                 points_right.append(sector.point_r)
 
-        for line in ransac.best_lines:
-            if (line.n_inliners > 30):
-                P = plot_line(line.best_line, -2000, 4000, -2000, 4000, 5)
-                plot(P[0], P[1])
-        scatter([c[0] for c in ransac.landmarks], [c[1] for c in ransac.landmarks],
+        # for line in ransac.best_lines:
+        #     P = plot_line(line.best_line, -2000, 4000, -2000, 4000, 2)
+        #     plot(P[0], P[1])
+        for P in ransac.walls:
+            print("P[0]", P[0])
+            print("P[1]", P[1])
+            plot(P[0], P[1])
+
+        scatter([c[1][0] for c in ransac.landmarks], [c[1][1] for c in ransac.landmarks],
                     c='b', s=200)
 
             # print(line.n_inliners)

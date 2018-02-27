@@ -250,6 +250,34 @@ class Points(DrawableObject):
                     self.cursor_objects.append(self.canvas.create_line(
                         *points, fill=self.color))
 
+class Walls(DrawableObject):
+    # Points, optionally with error ellipses.
+    def __init__(self, points_1, points_2, canvas, color = "red", radius = 5):
+        self.points_1 = points_1
+        self.points_2 = points_2
+        self.canvas = canvas
+        self.color = color
+        self.radius = radius
+        self.cursor_objects = []
+
+    def background_draw(self):
+        pass
+
+    def draw(self, at_step):
+        if self.cursor_objects:
+            map(self.canvas.delete, self.cursor_objects)
+            self.cursor_objects = []
+        if at_step < len(self.points_1):
+            for i in xrange(len(self.points_1[at_step])):
+                # Draw point.
+                p1 = self.points_1[at_step][i]
+                p2 = self.points_2[at_step][i]
+                print("p1", p1)
+                print("p2", p2)
+
+                self.cursor_objects.append(self.canvas.create_line(p1[0], p1[1], p2[0], p2[1],
+                    fill=self.color))
+
 class PolygonPoints(DrawableObject):
     # Points, optionally with error ellipses.
     def __init__(self, points, canvas, color = "red", radius = 5, ellipses = [], ellipse_factor = 1.0, background_image=None, background_d=None):
@@ -467,6 +495,25 @@ def load_data():
                      for cylinders_one_scan in logfile.detected_cylinders ]
         draw_objects.append(Points(positions, sensor_canvas, "#88FF88"))
 
+    if logfile.detected_walls:
+        positions_1 = []
+        positions_2 = []
+        for walls_one_scan in logfile.detected_walls:
+            p1 = []
+            p2 = []
+            for W in walls_one_scan:
+                P1 = (W[0], W[1])
+                P2 = (W[2], W[3])
+                print("P1", P1)
+                print("P2", P2)
+
+                p1.append(to_sensor_canvas(P1, sensor_canvas_extents, max_scanner_range))
+                p2.append(to_sensor_canvas(P2, sensor_canvas_extents, max_scanner_range))
+            positions_1.append(p1)
+            positions_2.append(p2)
+        draw_objects.append(Walls(positions_1, positions_2, sensor_canvas, "#DC23C5"))
+
+
     # Insert: world objects, cylinders and corresponding world objects, ellipses.
     if logfile.world_cylinders:
         positions = [[to_world_canvas(pos, canvas_extents, world_extents)
@@ -475,12 +522,11 @@ def load_data():
         # Also setup cylinders if present.
         # Note this assumes correct aspect ratio.
         factor = canvas_extents[0] / world_extents[0]
-        # draw_objects.append(Points(positions, world_canvas, "#DC23C5",
-        draw_objects.append(Points(positions, world_canvas, "#000000",
+        draw_objects.append(Points(positions, world_canvas, "#DC23C5",
+        # draw_objects.append(Points(positions, world_canvas, "#000000",
                                    ellipses = logfile.world_ellipses,
                                    ellipse_factor = factor))
-
-
+   
     # Insert: detected cylinders, transformed into world coord system.
     if logfile.detected_cylinders and logfile.filtered_positions and \
         len(logfile.filtered_positions[0]) > 2:
@@ -497,6 +543,31 @@ def load_data():
                 this_pose_positions.append(p)
             positions.append(this_pose_positions)
         draw_objects.append(Points(positions, world_canvas, "#88FF88"))
+
+    if logfile.detected_walls and logfile.filtered_positions and \
+        len(logfile.filtered_positions[0]) > 2:
+        positions_1 = []
+        positions_2 = []
+
+        for i in xrange(min(len(logfile.detected_walls), len(logfile.filtered_positions))):
+            pos = logfile.filtered_positions[i]
+            dx = cos(pos[2])
+            dy = sin(pos[2])
+            p1 = []
+            p2 = []
+            for W in logfile.detected_walls[i]:
+                P = (W[0], W[1])
+                x = P[0] * dx - P[1] * dy + pos[0]
+                y = P[0] * dy + P[1] * dx + pos[1]
+                p1.append(to_world_canvas((x,y), canvas_extents, world_extents))
+                P = (W[2], W[3])
+                x = P[0] * dx - P[1] * dy + pos[0]
+                y = P[0] * dy + P[1] * dx + pos[1]
+                p2.append(to_world_canvas((x,y), canvas_extents, world_extents))
+            positions_1.append(p1)
+            positions_2.append(p2)
+        draw_objects.append(Walls(positions_1, positions_2, world_canvas, "#DC23C5"))
+
 
     # Insert: particles.
     if logfile.particles:

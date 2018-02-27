@@ -35,6 +35,7 @@ class LegoLogfile(object):
         self.world_walls = []
         self.world_ellipses = []
         self.particles = []
+        self.detected_walls = []
         self.last_ticks = None
 
     def read(self, filename):
@@ -57,6 +58,7 @@ class LegoLogfile(object):
         first_world_walls = True
         first_world_ellipses = True
         first_particles = True
+        first_detected_walls = True
         f = open(filename)
         for l in f:
             sp = l.split()
@@ -174,6 +176,12 @@ class LegoLogfile(object):
                         first_detected_cylinders = False
                     cyl = map(float, sp[2:])
                     self.detected_cylinders.append([(cyl[2*i], cyl[2*i+1]) for i in range(len(cyl)/2)])
+                elif sp[1] == 'W':
+                    if first_detected_walls:
+                        self.detected_walls = []
+                        first_detected_walls = False
+                    wall = map(float, sp[2:])
+                    self.detected_walls.append([(wall[4*i], wall[4*i+1], wall[4*i+2], wall[4*i+3]) for i in range(len(wall)/4)])
 
             # W is information to be plotted in the world (in each scan).
             # File format: W <type> info...
