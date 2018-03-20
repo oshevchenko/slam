@@ -6,6 +6,7 @@ from lego_robot import *
 from math import sin, cos, pi, ceil
 import time
 import Image, ImageDraw, ImageTk
+
 # import sys
 
 
@@ -411,7 +412,7 @@ def slider_moved(index):
     # Call all draw objects.
     for d in draw_objects:
         d.draw(i)
-
+    world_canvas.postscript(file="file_name.ps", colormode='color')
     # Print info about current point.
     info.config(text=logfile.info(i))
 def play_pause():
@@ -675,6 +676,7 @@ if __name__ == '__main__':
     world_canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo)
     # world_canvas.create_image(100, 100, image=photo)
     world_canvas.pack(side=LEFT)
+    world_canvas.postscript(file="file_name.ps", colormode='color')
     sensor_canvas = Canvas(frame1,width=sensor_canvas_extents[0],height=sensor_canvas_extents[1]/2,bg="white")
     sensor_canvas.pack(anchor=N,side=RIGHT)
     scale = Scale(root, orient=HORIZONTAL, command = slider_moved)

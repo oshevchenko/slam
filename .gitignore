@@ -2,6 +2,7 @@
 *.jpg
 *.png
 *.pyc
+*.ps
 ekf_slam_correction.txt
 fast_slam_correction.txt
 scans_without_landmarks.txt
