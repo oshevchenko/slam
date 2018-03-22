@@ -34,7 +34,7 @@ class MyFactoryThread(jsocket.ServerFactoryThread):
 
 class SlamJsonServer(object):
 	def __init__(self):
-		self.server = jsocket.ServerFactory(MyFactoryThread, address='127.0.0.1', port=5490)
+		self.server = jsocket.ServerFactory(MyFactoryThread, address='0.0.0.0', port=5490)
 		self.server.timeout = 10.0
 		self.server.start()
 

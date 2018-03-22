@@ -6,7 +6,10 @@ from lego_robot import *
 from math import sin, cos, pi, ceil
 import time
 import Image, ImageDraw, ImageTk
-
+from slam_10_e_correction_answer import *
+from threading import Thread
+import Queue as queue
+import io
 # import sys
 
 
@@ -22,6 +25,11 @@ sensor_canvas_extents = canvas_extents
 # The maximum scanner range used to scale scan measurement drawings,
 # in millimeters.
 max_scanner_range = 4000.0
+global draw_objects_single
+global fsp
+global fsp_q
+global filtered_positions
+global filtered_stddevs
 
 class DrawableObject(object):
     def draw(self, at_step):
@@ -95,6 +103,7 @@ class Trajectory(DrawableObject):
             self.canvas.delete(self.cursor_object2)
             self.cursor_object2 = None
         if at_step < len(self.points):
+            at_step = len(self.points) - 1
             p = self.points[at_step]
 
             p_xy_only = []
@@ -273,8 +282,8 @@ class Walls(DrawableObject):
                 # Draw point.
                 p1 = self.points_1[at_step][i]
                 p2 = self.points_2[at_step][i]
-                print("p1", p1)
-                print("p2", p2)
+                # print("p1", p1)
+                # print("p2", p2)
 
                 self.cursor_objects.append(self.canvas.create_line(p1[0], p1[1], p2[0], p2[1],
                     fill=self.color))
@@ -396,6 +405,18 @@ def to_sensor_canvas(sensor_point, canvas_extents, scanner_range):
     y = int(canvas_extents[1] / 2.0 - 50 - 1 - sensor_point[0] * scale)
     return (x, y)
 
+def draw_canvas():
+    for d in draw_objects_single:
+        d.draw(0)
+    # world_canvas.postscript(file="file_name.ps", colormode='color')
+
+    # ps = world_canvas.postscript(colormode='color')
+    # img = Image.open(io.BytesIO(ps.encode('utf-8')))
+    # img.save('./test.jpg')
+
+    # Print info about current point.
+    # info.config(text=logfile.info(i))
+
 def slider_moved(index):
     """Callback for moving the scale slider."""
     i = int(index)
@@ -434,6 +455,124 @@ def add_file():
 
 def save_scan_arena_bmp():
     pass
+
+def load_data_single(fsp_data):
+    global draw_objects_single
+    global filtered_positions
+    global filtered_stddevs
+
+    draw_objects_single=[]
+    world_points = fsp_data['W_P']
+    detected_cylinders = fsp_data['D_C']
+    world_cylinders = fsp_data['W_C']
+    world_ellipses = fsp_data['W_E']
+    # print("number of detected cylinders", len(detected_cylinders))
+    detected_walls = fsp_data['D_W']
+    filtered_position = fsp_data['F']
+    filtered_positions.append(filtered_position)
+
+    filtered_stddev = fsp_data['E']
+    filtered_stddevs.append(filtered_stddev)
+
+
+
+    # print("world_points len", len(world_points))
+
+    if len(world_points):
+                      
+        # cyl_for_pos=[]
+        ppp=[]
+        test_positions=[]
+
+        for pos in world_points:
+            ppp.append(to_world_canvas(pos, canvas_extents, world_extents))
+        test_positions.append(ppp)
+            
+        # Also setup cylinders if present.
+        # Note this assumes correct aspect ratio.
+        # factor = canvas_extents[0] / world_extents[0]
+        # draw_objects.append(Points(test_positions, world_canvas, "#00f2ff", 1))
+        draw_objects_single.append(PolygonPoints(test_positions, world_canvas, "#00f2ff", 1))
+
+    if len(world_cylinders):
+        # print("world_cylinders", world_cylinders)
+        # print("world_ellipses", world_ellipses)
+        test_positions=[]
+        test_world_ellipses=[]
+        test_world_ellipses.append(world_ellipses)
+        positions = [to_world_canvas(pos, canvas_extents, world_extents)
+                      for pos in world_cylinders]
+        test_positions.append(positions)
+        # Also setup cylinders if present.
+        # Note this assumes correct aspect ratio.
+        factor = canvas_extents[0] / world_extents[0]
+        draw_objects_single.append(Points(test_positions, world_canvas, "#DC23C5",
+                                   ellipses = test_world_ellipses,
+                                   ellipse_factor = factor))
+                                   # ))
+
+    if len(detected_cylinders):
+        test_positions=[]
+        positions = [to_sensor_canvas(pos, sensor_canvas_extents, max_scanner_range)
+                     for pos in detected_cylinders ]
+        test_positions.append(positions)
+        draw_objects_single.append(Points(test_positions, sensor_canvas, "#88FF88"))
+
+    if len(detected_walls):
+        positions_1 = []
+        positions_2 = []
+
+        p1 = []
+        p2 = []
+        for W in detected_walls:
+            P1 = (W[0], W[1])
+            P2 = (W[2], W[3])
+            # print("P1", P1)
+            # print("P2", P2)
+
+            p1.append(to_sensor_canvas(P1, sensor_canvas_extents, max_scanner_range))
+            p2.append(to_sensor_canvas(P2, sensor_canvas_extents, max_scanner_range))
+        positions_1.append(p1)
+        positions_2.append(p2)
+        draw_objects_single.append(Walls(positions_1, positions_2, sensor_canvas, "#DC23C5"))
+
+    if len(detected_walls) and len(filtered_position):
+        positions_1 = []
+        positions_2 = []
+
+        pos = filtered_position
+        dx = cos(pos[2])
+        dy = sin(pos[2])
+        p1 = []
+        p2 = []
+        for W in detected_walls:
+            P = (W[0], W[1])
+            x = P[0] * dx - P[1] * dy + pos[0]
+            y = P[0] * dy + P[1] * dx + pos[1]
+            p1.append(to_world_canvas((x,y), canvas_extents, world_extents))
+            P = (W[2], W[3])
+            x = P[0] * dx - P[1] * dy + pos[0]
+            y = P[0] * dy + P[1] * dx + pos[1]
+            p2.append(to_world_canvas((x,y), canvas_extents, world_extents))
+        positions_1.append(p1)
+        positions_2.append(p2)
+        draw_objects_single.append(Walls(positions_1, positions_2, world_canvas, "#DC23C5"))
+
+    if len(filtered_positions):
+        if len(filtered_positions[0]) > 2:
+            positions = [tuple(list(to_world_canvas(pos, canvas_extents, world_extents)) + [pos[2]]) for pos in filtered_positions]
+        else:
+            positions = [to_world_canvas(pos, canvas_extents, world_extents) for pos in filtered_positions]
+        # If there is error ellipses, insert them as well.
+        draw_objects_single.append(Trajectory(positions, world_canvas, world_extents, canvas_extents,
+            standard_deviations = filtered_stddevs,
+            cursor_color="blue", background_color="lightblue",
+            position_stddev_color = "#8080ff", theta_stddev_color="#c0c0ff"))
+    world_canvas.delete(ALL)
+    sensor_canvas.delete(ALL)
+    # for d in draw_objects_single:
+    #     d.background_draw()
+
 
 def load_data():
     global canvas_extents, sensor_canvas_extents, world_extents, max_scanner_range, num_points
@@ -505,8 +644,8 @@ def load_data():
             for W in walls_one_scan:
                 P1 = (W[0], W[1])
                 P2 = (W[2], W[3])
-                print("P1", P1)
-                print("P2", P2)
+                # print("P1", P1)
+                # print("P2", P2)
 
                 p1.append(to_sensor_canvas(P1, sensor_canvas_extents, max_scanner_range))
                 p2.append(to_sensor_canvas(P2, sensor_canvas_extents, max_scanner_range))
@@ -599,10 +738,30 @@ def load_data():
     global global_counter
     global_counter = 0
 
+
+
+
+def slam_thread(arg):
+    while True:
+        if not fsp.running:
+            fsp.clean()
+            break
+        fsp_data = fsp.process()
+        if fsp_data == None:
+            print("No data...")
+            time.sleep(0.5)
+        else:
+            fsp_q.put(fsp_data)
+
+
+
 # Main program.
 if __name__ == '__main__':
     # PIL create an empty image and draw object to draw on
     # memory only, not visible
+    filtered_positions=[]
+    filtered_stddevs=[]
+
     white = (255, 255, 255)
     black = (0, 0, 0)
     blue = (0, 0, 255)
@@ -698,7 +857,7 @@ if __name__ == '__main__':
 
     # Ask for file.
     all_file_names = []
-    add_file()
+    # add_file()
 
     # root.mainloop()
     millis = int(round(time.time() * 1000))
@@ -706,19 +865,44 @@ if __name__ == '__main__':
     global global_counter, num_points, playback
     playback=False
     global_counter=0
+    global fsp
+    global fsp_q
+    fsp_q = queue.Queue()
+    fsp = FastSlamProcessor()
+    thread = Thread(target = slam_thread, args = (10, ))
+    thread.start()
+
     while True:
-        root.update_idletasks()
-        root.update()
-        if (playback):
-            millis_new = int(round(time.time() * 1000))
-            if (global_counter < num_points):
-                if (millis_new - millis)>500:
-                    slider_moved(global_counter)
-                    print("global_counter %d num_points %d"%(global_counter, num_points))
+        try:
+            root.update_idletasks()
+            root.update()
+            # if (playback):
+            time.sleep(2)
+            fsp_data = None
+            while not fsp_q.empty():
+                fsp_data = fsp_q.get()
+            if fsp_data:
+                load_data_single(fsp_data)
+                draw_canvas()
 
-                    millis = millis_new
-                    global_counter += 1
-            else:
-                playback=False
+                    # world_points = fsp_data['world_points']
+                    # print("world_points len", len(world_points))
 
+
+            # millis_new = int(round(time.time() * 1000))
+            # if (global_counter < num_points):
+            #     if (millis_new - millis)>500:
+            #         slider_moved(global_counter)
+            #         print("global_counter %d num_points %d"%(global_counter, num_points))
+
+            #         millis = millis_new
+            #         global_counter += 1
+            # else:
+            #     playback=False
+        except KeyboardInterrupt:
+            fsp.stop()
+            thread.join()
+            print"Bye!"
+            break
     root.destroy()
+    sys.exit()

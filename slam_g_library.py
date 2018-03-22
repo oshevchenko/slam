@@ -50,6 +50,15 @@ def write_error_ellipses(file_desc, line_header, covariance_matrix_list):
                  (angle, sqrt(eigenvals[0]), sqrt(eigenvals[1])),
     print >> file_desc
 
+def write_error_ellipses_tuple(covariance_matrix_list):
+    ellipses = []
+    for m in covariance_matrix_list:
+        eigenvals, eigenvects = np.linalg.eig(m)
+        angle = atan2(eigenvects[1,0], eigenvects[0,0])
+        ellipses.append(tuple((angle, sqrt(eigenvals[0]), sqrt(eigenvals[1]))))
+    return ellipses
+
+
 
 # Find the derivative in scan data, ignoring invalid measurements.
 

@@ -9,7 +9,8 @@ from slam_json_server import *
 from lego_robot import *
 from slam_g_library import get_cylinders_from_scan, write_cylinders,\
      write_error_ellipses, get_mean, get_error_ellipse_and_heading_variance,\
-     print_particles, filter1, get_subsampled_points, write_walls
+     print_particles, filter1, get_subsampled_points, write_walls, \
+     write_error_ellipses_tuple
      
 from math import sin, cos, pi, atan2, sqrt, exp
 import copy
@@ -329,7 +330,7 @@ class FastSLAM:
                     measurement, measurement_in_scanner_system,
                     number_of_landmarks,
                     self.minimum_correspondence_likelihood,
-                    Qt_measurement_covariance, scanner_displacement)
+                    Qt_measurement_covariance, self.scanner_displacement)
 
             # Append overall weight of this particle to weight list.
             weights.append(weight)
@@ -361,164 +362,189 @@ class FastSLAM:
         # Then resample, based on the weight array.
         self.particles = self.resample(weights)
 
+class FastSlamProcessor:
+    def __init__(self):
+        # Robot constants.
+        # scanner_displacement = 30.0
+        # ticks_to_mm = 0.349
+        # robot_width = 155.0
+        self.scanner_displacement = 0
+        self.ticks_to_mm = 1.037
+        self.robot_width = 300
+
+        # Cylinder extraction and matching constants.
+        self.minimum_valid_distance = 20.0
+        self.depth_jump = 70.0
+        self.cylinder_offset = 5.0
+        self.points_per_scan = 1000
+        self.max_cylinder_d = 250
+
+        # Filter constants.
+        self.control_motion_factor = 0.7  # Error in motor control.
+        self.control_turn_factor = 2.0  # Additional error due to slip when turning.
+        self.measurement_distance_stddev = 200.0  # Distance measurement error of cylinders.
+        self.measurement_angle_stddev = 15.0 / 180.0 * pi  # Angle measurement error.
+        self.minimum_correspondence_likelihood = 0.001  # Min likelihood of correspondence.
+
+        # Generate initial particles. Each particle is (x, y, theta).
+        self.number_of_particles = 25
+        # initial_state = array([500, 2000.0, 350.0 / 180.0 * pi])
+        # start_state = np.array([500.0, 0.0, 45.0 / 180.0 * pi])
+        # gym_5
+        # start_state = np.array([500.0, 2000.0, 350.0 / 180.0 * pi])
+        # gym_4
+        # start_state = np.array([2700, 2500.0, 250.0 / 180.0 * pi])
+        # test_8
+        self.start_state = np.array([2000, 2000.0, 325.0 / 180.0 * pi])
+
+        self.initial_particles = [copy.copy(Particle(self.start_state))
+                         for _ in xrange(self.number_of_particles)]
+
+        # Setup filter.
+        self.fs = FastSLAM(self.initial_particles,
+            self.robot_width, self.scanner_displacement,
+            self.control_motion_factor, self.control_turn_factor,
+            self.measurement_distance_stddev,
+            self.measurement_angle_stddev,
+            self.minimum_correspondence_likelihood)
+
+        # Loop over all motor tick records.
+        # This is the FastSLAM filter loop, with prediction and correction.
+        # self.f = open("fast_slam_correction.txt", "w")
+        # self.f_sub_scans = open("scans_without_landmarks.txt", "w")
+        self.json_server = SlamJsonServer()
+        # for i in xrange(len(logfile.motor_ticks)-5):
+        #     i=0
+        self.i=0
+        self.first_motor_ticks = True
+        self.last_m_t = None
+        self.running = True
+
+    def process(self):
+        """ virtual method - Implementer must define protocol """
+
+        obj = self.json_server.get_data()
+        if not obj:
+            return None
+                # time.sleep(0.5)
+                # continue
+
+        print("point %d"%(self.i))
+        self.i += 1
+
+        m_t = obj['motor_ticks']
+        # print("m_t", m_t)
+        if self.first_motor_ticks:
+            self.first_motor_ticks = False
+            self.last_m_t = m_t
+        m_t_d=tuple([m_t[j]-self.last_m_t[j] for j in range(2)])
+        self.last_m_t = m_t
+
+        s_d = obj['scan_data']
+        # print("s_d", s_d)
+        # print("len(s_d)",len(s_d))
+
+        # if (i%10)==0:
+        #     print "Motor tick: ", i
+        # Prediction.
+        s_d = filter1(s_d)
+        subsampled_points = get_subsampled_points(s_d, 1)
+        control = map(lambda x: x * self.ticks_to_mm, m_t_d)
+        self.fs.predict(control)
+
+        # Correction.
+        cylinders = get_cylinders_from_scan(s_d, self.depth_jump,
+            self.minimum_valid_distance, self.cylinder_offset, self.points_per_scan,
+            self.max_cylinder_d)
+
+        ransac = Ransac(s_d, cylinders, points_per_sector = 33,
+            min_distance = 300, inline_threshold=45,
+            attempts = 10, valid_threshold = 0.8)
+        ransac.try_merge_sectors()
+
+        # scans_without_landmarks = get_scans_without_landmarks(
+        #     s_d, cylinders)
+        # print(scans_without_landmarks)
+        # write_cylinders(self.f_sub_scans, "SC", [(obs[0], obs[1])
+        #                            for obs in ransac.landmarks])
+        cylinders += ransac.landmarks
+
+        # write_cylinders(self.f, "D C", [(obs[1][0], obs[1][1])
+        #                         for obs in cylinders])
+
+        # write_walls(self.f, "D W", [(W[0][0], W[1][0], W[0][1], W[1][1])
+        #                                     for W in ransac.walls])
+        self.fs.correct(cylinders)
+
+        # Output particles.
+        # print_particles(self.fs.particles, self.f)
+
+        # Output state estimated from all particles.
+        mean = get_mean(self.fs.particles)
+        # print >> self.f, "F %.0f %.0f %.3f" %\
+        #         (mean[0] + self.scanner_displacement * cos(mean[2]),
+        #         mean[1] + self.scanner_displacement * sin(mean[2]),
+        #         mean[2])
+        out_mean = (mean[0] + self.scanner_displacement * cos(mean[2]),
+                mean[1] + self.scanner_displacement * sin(mean[2]),
+                mean[2])
+        # Output error ellipse and standard deviation of heading.
+        errors = get_error_ellipse_and_heading_variance(self.fs.particles, mean)
+        # print >> self.f, "E %.3f %.0f %.0f %.3f" % errors
+
+        out_stddev = errors
+
+        # Output landmarks of particle which is closest to the mean position.
+        output_particle = min([
+            (np.linalg.norm(mean[0:2] - self.fs.particles[j].pose[0:2]),j)
+            for j in xrange(len(self.fs.particles)) ])[1]
+        # Write estimates of landmarks.
+        # write_cylinders(self.f, "W C",
+        #                 self.fs.particles[output_particle].landmark_positions)
+
+        world_cylinders = self.fs.particles[output_particle].landmark_positions
+        # subsampled_points.append(self.fs.particles[output_particle].pose[0])
+        # subsampled_points.append(self.fs.particles[output_particle].pose[1])
+
+        world_points = [LegoLogfile.scanner_to_world(mean, c)
+                        for c in subsampled_points]
+        world_points.append([mean[0], mean[1]])
+
+        # write_cylinders(self.f, "W P", world_points)
+
+
+        detected_cylinders=[]
+        for obs in cylinders:
+            detected_cylinders.append((obs[1][0], obs[1][1]))
+
+        ransac_walls = [(W[0][0], W[1][0], W[0][1], W[1][1]) for W in ransac.walls]
+
+
+        # Write covariance matrices.
+        # write_error_ellipses(self.f, "W E",
+        #                     self.fs.particles[output_particle].landmark_covariances)
+        world_ellipses = write_error_ellipses_tuple(self.fs.particles[output_particle].landmark_covariances)
+        out_data = {'W_P':world_points, 'D_C':detected_cylinders, 'D_W':ransac_walls, 'F':out_mean,
+            'E':out_stddev, 'W_C':world_cylinders, 'W_E':world_ellipses}
+        return out_data
+    def stop(self):
+        self.running = False
+
+    def clean(self):
+        self.json_server.stop()
+        # self.f.close()
+        # self.f_sub_scans.close()
 
 if __name__ == '__main__':
-    # Robot constants.
-    # scanner_displacement = 30.0
-    # ticks_to_mm = 0.349
-    # robot_width = 155.0
-    scanner_displacement = 0
-    ticks_to_mm = 1.037
-    robot_width = 300
-
-    # Cylinder extraction and matching constants.
-    minimum_valid_distance = 20.0
-    depth_jump = 70.0
-    cylinder_offset = 5.0
-    points_per_scan = 1000
-    max_cylinder_d = 250
-
-    # Filter constants.
-    control_motion_factor = 0.7  # Error in motor control.
-    control_turn_factor = 2.0  # Additional error due to slip when turning.
-    measurement_distance_stddev = 200.0  # Distance measurement error of cylinders.
-    measurement_angle_stddev = 15.0 / 180.0 * pi  # Angle measurement error.
-    minimum_correspondence_likelihood = 0.001  # Min likelihood of correspondence.
-
-    # Generate initial particles. Each particle is (x, y, theta).
-    number_of_particles = 25
-    # initial_state = array([500, 2000.0, 350.0 / 180.0 * pi])
-    # start_state = np.array([500.0, 0.0, 45.0 / 180.0 * pi])
-    # gym_5
-    # start_state = np.array([500.0, 2000.0, 350.0 / 180.0 * pi])
-    # gym_4
-    # start_state = np.array([2700, 2500.0, 250.0 / 180.0 * pi])
-    # test_8
-    start_state = np.array([2000, 2000.0, 325.0 / 180.0 * pi])
-
-    initial_particles = [copy.copy(Particle(start_state))
-                         for _ in xrange(number_of_particles)]
-
-    # Setup filter.
-    fs = FastSLAM(initial_particles,
-                  robot_width, scanner_displacement,
-                  control_motion_factor, control_turn_factor,
-                  measurement_distance_stddev,
-                  measurement_angle_stddev,
-                  minimum_correspondence_likelihood)
-
-    # Read data.
-    logfile = LegoLogfile()
-    # logfile.read("robot4_motors.txt")
-    # logfile.read("robot4_scan.txt")
-    # logfile.read("output.txt")
-    # logfile.read("robo_scan_777.txt")
-
-    # logfile.read("gym_4/output.txt")
-    # logfile.read("gym_4/robo_scan_777_186.txt")
-    logfile.read("test_8/output")
-    logfile.read("test_8/robo_scan_777.txt")
-    
-    # Loop over all motor tick records.
-    # This is the FastSLAM filter loop, with prediction and correction.
-    f = open("fast_slam_correction.txt", "w")
-    f_sub_scans = open("scans_without_landmarks.txt", "w")
-    json_server = SlamJsonServer()
-    # for i in xrange(len(logfile.motor_ticks)-5):
-    #     i=0
-    i=0
-    first_motor_ticks = True
+    fsp = FastSlamProcessor()
     while True:
         try:
-            obj = json_server.get_data()
-            if not obj:
+            data = fsp.process()
+            if data == None:
                 print("No data...")
-                time.sleep(1)
-                continue
-
-            print("point %d"%(i))
-            i += 1
-
-            m_t = obj['motor_ticks']
-            if first_motor_ticks:
-                first_motor_ticks = False
-                last_m_t = m_t
-            m_t_d=tuple([m_t[j]-last_m_t[j] for j in range(2)])
-            last_m_t = m_t
-
-            s_d = obj['scan_data']
-
-            # if (i%10)==0:
-            #     print "Motor tick: ", i
-            # Prediction.
-            s_d = filter1(s_d)
-            subsampled_points = get_subsampled_points(s_d, 1)
-            control = map(lambda x: x * ticks_to_mm, m_t_d)
-            fs.predict(control)
-
-            # Correction.
-            cylinders = get_cylinders_from_scan(s_d, depth_jump,
-                minimum_valid_distance, cylinder_offset, points_per_scan,
-                max_cylinder_d)
-
-            ransac = Ransac(s_d, cylinders, points_per_sector = 33,
-                min_distance = 300, inline_threshold=45,
-                attempts = 10, valid_threshold = 0.8)
-            ransac.try_merge_sectors()
-
-            # scans_without_landmarks = get_scans_without_landmarks(
-            #     s_d, cylinders)
-            # print(scans_without_landmarks)
-            # write_cylinders(f_sub_scans, "SC", [(obs[0], obs[1])
-            #                            for obs in ransac.landmarks])
-            cylinders += ransac.landmarks
-
-            write_cylinders(f, "D C", [(obs[1][0], obs[1][1])
-                                    for obs in cylinders])
-
-            write_walls(f, "D W", [(W[0][0], W[1][0], W[0][1], W[1][1])
-                                                for W in ransac.walls])
-            fs.correct(cylinders)
-
-            # Output particles.
-            # print_particles(fs.particles, f)
-
-            # Output state estimated from all particles.
-            mean = get_mean(fs.particles)
-            print >> f, "F %.0f %.0f %.3f" %\
-                  (mean[0] + scanner_displacement * cos(mean[2]),
-                    mean[1] + scanner_displacement * sin(mean[2]),
-                    mean[2])
-
-            # Output error ellipse and standard deviation of heading.
-            errors = get_error_ellipse_and_heading_variance(fs.particles, mean)
-            print >> f, "E %.3f %.0f %.0f %.3f" % errors
-
-            # Output landmarks of particle which is closest to the mean position.
-            output_particle = min([
-                (np.linalg.norm(mean[0:2] - fs.particles[j].pose[0:2]),j)
-                for j in xrange(len(fs.particles)) ])[1]
-            # Write estimates of landmarks.
-            write_cylinders(f, "W C",
-                            fs.particles[output_particle].landmark_positions)
-
-        
-            # subsampled_points.append(fs.particles[output_particle].pose[0])
-            # subsampled_points.append(fs.particles[output_particle].pose[1])
-
-            world_points = [LegoLogfile.scanner_to_world(mean, c)
-                            for c in subsampled_points]
-            world_points.append([mean[0], mean[1]])
-            
-            write_cylinders(f, "W P", world_points)
-
-            # Write covariance matrices.
-            write_error_ellipses(f, "W E",
-                                fs.particles[output_particle].landmark_covariances)
+                time.sleep(0.5)
         except KeyboardInterrupt:
-            json_server.stop()
+            fsp.stop()
             print"Bye!"
-            sys.exit()
-
-    f.close()
-    f_sub_scans.close()
+            break
+    sys.exit()
