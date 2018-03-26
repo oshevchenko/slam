@@ -789,8 +789,6 @@ def slam_thread_img(arg):
             data = io.BytesIO()
             img.save(data, 'PNG')
             udp_sender.send(data.getvalue(), (RECEIVER_IP, RECEIVER_PORT))
-
-            
         time.sleep(0.5)
 
 
@@ -924,7 +922,7 @@ if __name__ == '__main__':
             root.update_idletasks()
             root.update()
             # if (playback):
-            time.sleep(2)
+            time.sleep(1)
             fsp_data = None
             while not fsp_q.empty():
                 fsp_data = fsp_q.get()

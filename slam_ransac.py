@@ -112,34 +112,29 @@ class BestLine:
 
 
 class SectorInliners:
-    def __init__(self, inliners, rays):
+    def __init__(self, inliners):
         self.best_inliners = inliners
         self.best_inliners_len = len(self.best_inliners)
-        self.ray_l, self.ray_r = rays
         self.FindBestLine()
 
     def FindBestLine(self):
         self.valid = True
         self.best_line = least_squares_line(self.best_inliners)
-        self.point_l = intersection(self.best_line, self.ray_l)
-        self.point_r = intersection(self.best_line, self.ray_r)
 
 
 class Sector(SectorInliners):
-    def __init__(self, scan, rays, inline_threshold = 60, attempts = 10, valid_threshold = 0.8):
+    def __init__(self, scan, inline_threshold = 60, attempts = 10, valid_threshold = 0.8):
         self.scan = scan
         self.best_inliners = []
         self.best_inliners_len = 0
         self.scan_len = len(self.scan)
         self.valid_threshold = self.scan_len * valid_threshold
-        self.ray_l, self.ray_r = rays
+
         self.inline_threshold = inline_threshold
 
 
         self.best_line = []
         self.attempts = attempts
-        self.point_l = []
-        self.point_r = []
         self.valid = False
 
 
@@ -177,7 +172,7 @@ class Ransac:
                                     attempts = 10, valid_threshold = 0.8):
         self.points_per_sector = points_per_sector
         self.scan = []
-        self.sector_rays = []
+        # self.sector_rays = []
         self.min_distance = min_distance
         self.n_valid_sectors = 0
         self.valid_sectors = []
@@ -190,14 +185,14 @@ class Ransac:
         self.sectors = []
         while offset < len(scan) :
 
-            bearing = LegoLogfile.beam_index_to_angle(offset)
-            x, y = 3000*cos(bearing), 3000*sin(bearing)
-            self.sector_rays.append(np.array([y/x, -1, 0, 0, 0, x, y]))
-            ray_r = np.array([y/x, -1, 0])
+            # bearing = LegoLogfile.beam_index_to_angle(offset)
+            # x, y = 3000*cos(bearing), 3000*sin(bearing)
+            # self.sector_rays.append(np.array([y/x, -1, 0, 0, 0, x, y]))
+            # ray_r = np.array([y/x, -1, 0])
 
-            bearing = LegoLogfile.beam_index_to_angle(offset+self.points_per_sector)
-            x, y = 3000*cos(bearing), 3000*sin(bearing)
-            ray_l = np.array([y/x, -1, 0])
+            # bearing = LegoLogfile.beam_index_to_angle(offset+self.points_per_sector)
+            # x, y = 3000*cos(bearing), 3000*sin(bearing)
+            # ray_l = np.array([y/x, -1, 0])
 
             sec_points = self.get_sector_scans_without_landmarks (scan, cylinders,
                                                                          offset)
@@ -206,19 +201,19 @@ class Ransac:
             #     self.scan.append(point)
 
             offset += self.points_per_sector
-            sector = Sector(sec_points, (ray_l, ray_r), inline_threshold=self.inline_threshold,
+            sector = Sector(sec_points, inline_threshold=self.inline_threshold,
                 attempts=attempts, valid_threshold=valid_threshold)
             if sector.valid:
                 self.n_valid_sectors += 1
-            self.sectors.append(sector)
+                self.sectors.append(sector)
 
         self.scan_len = len(self.scan)
         # print(self.n_valid_sectors)
 
 
-        bearing = LegoLogfile.beam_index_to_angle(offset)
-        x, y = 3000*cos(bearing), 3000*sin(bearing)
-        self.sector_rays.append(np.array([y/x, -1, 0, 0, 0, x, y]))
+        # bearing = LegoLogfile.beam_index_to_angle(offset)
+        # x, y = 3000*cos(bearing), 3000*sin(bearing)
+        # self.sector_rays.append(np.array([y/x, -1, 0, 0, 0, x, y]))
 
         # print(self.set_of_sectors)
         # return self.scan
@@ -260,40 +255,33 @@ class Ransac:
         if self.n_valid_sectors < 2:
             return 0
 
-        while self.n_valid_sectors != n_valid_sectors_new:
-            self.n_valid_sectors = n_valid_sectors_new
-            n_valid_sectors_new = 0
-            candidate = None 
-
-            new_sectors =[]
-            for sector in self.sectors:
-                if sector.valid and candidate == None:
-                    candidate = sector
-                elif sector.valid and candidate != None:
-                    distance = distance_point_to_point(candidate.point_l, sector.point_r)
-                    angle = angle_line_to_line(candidate.best_line, sector.best_line)
-                    if (distance < 100  and angle < 0.2):
-                        candidate.best_inliners += sector.best_inliners
-                        candidate = SectorInliners(candidate.best_inliners, (sector.ray_l, candidate.ray_r))
-                    else:
-                        new_sectors.append(candidate)
-                        n_valid_sectors_new += 1
-                        candidate = sector
-                elif not sector.valid:
-                    if candidate != None:
-                        new_sectors.append(candidate)
-                        n_valid_sectors_new += 1
-                        candidate = None
-                    new_sectors.append(sector)
-            if candidate != None:
-                new_sectors.append(candidate)
-                n_valid_sectors_new += 1
-            self.sectors = new_sectors
-            # print("self.n_valid_sectors %d n_valid_sectors_new %d"%(self.n_valid_sectors,n_valid_sectors_new))
+        while True:
+            repeat = False
+            for subset in itertools.combinations(self.sectors, 2):
+                angle = angle_line_to_line(subset[0].best_line, subset[1].best_line)
+                distance1 = distance_point_to_line(subset[0].best_inliners[len(subset[0].best_inliners)/2], subset[1].best_line)
+                distance2 = distance_point_to_line(subset[1].best_inliners[len(subset[1].best_inliners)/2], subset[0].best_line)
+                distance = (distance1 + distance2) / 2
+                # print("angle, distance", angle, distance)
+                if (angle < 0.25 and distance < 200):
+                    new_sectors =[]
+                    subset[0].best_inliners += subset[1].best_inliners
+                    new_sectors.append(SectorInliners(subset[0].best_inliners))
+                    self.n_valid_sectors = 1
+                    for sector in self.sectors:
+                        if (sector != subset[0] and sector != subset[1]):
+                            new_sectors.append(sector)
+                            self.n_valid_sectors += 1
+                    self.sectors = new_sectors
+                    repeat = True
+                    break
+            # print("repeat:",repeat)
+            if not repeat:
+                break
 
         for sector in self.sectors:
-            if sector.valid:
-                self.best_lines.append(BestLine(sector.best_line, sector.best_inliners_len))
+            self.best_lines.append(BestLine(sector.best_line, sector.best_inliners_len))
+
                 
 
         self.best_lines = sorted(self.best_lines, key = lambda x: x.n_inliners, reverse=True)

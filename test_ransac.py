@@ -43,7 +43,8 @@ if __name__ == '__main__':
     # for i in xrange(97, 98):
     # for i in xrange(56, 57):
     # for i in xrange(0, 1):
-    for i in xrange(25, 26):
+    # for i in xrange(92, 93):
+    for i in xrange(91, 92):
         intersection_points=[]
         cylinders = get_cylinders_from_scan(logfile.scan_data[i], depth_jump,
             minimum_valid_distance, cylinder_offset, points_per_scan,
@@ -55,9 +56,9 @@ if __name__ == '__main__':
         scatter([c[0] for c in points], [c[1] for c in points],
             c='r', s=50)
 
-        for n_sector in xrange(len(ransac.sector_rays)):
+        # for n_sector in xrange(len(ransac.sector_rays)):
             # print(ransac.sector_rays[n_sector])
-            P = plot_ray(ransac.sector_rays[n_sector], 5)
+            # P = plot_ray(ransac.sector_rays[n_sector], 5)
             # plot(P[0], P[1])
 
         points_left = []
@@ -76,8 +77,8 @@ if __name__ == '__main__':
                 # P = plot_line(sector.best_line, -2000, 4000, -2000, 4000, 5)
                 # plot(P[0], P[1])
 
-                points_left.append(sector.point_l)
-                points_right.append(sector.point_r)
+                # points_left.append(sector.point_l)
+                # points_right.append(sector.point_r)
 
         # for line in ransac.best_lines:
         #     P = plot_line(line.best_line, -2000, 4000, -2000, 4000, 2)

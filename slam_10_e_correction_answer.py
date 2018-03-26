@@ -464,7 +464,7 @@ class FastSlamProcessor:
                 self.minimum_valid_distance, self.cylinder_offset, self.points_per_scan,
                 self.max_cylinder_d)
 
-            ransac = Ransac(s_d, cylinders, points_per_sector = 66,
+            ransac = Ransac(s_d, cylinders, points_per_sector = 33,
                 min_distance = 300, inline_threshold=20,
                 attempts = 10, valid_threshold = 0.9)
             ransac.try_merge_sectors()
