@@ -43,6 +43,7 @@ class SlamJsonServer(object):
 		for t in self.server._threads:
 			if not t.q.empty():
 				obj = json.loads(t.q.get())
+				break
 		return obj
 		# m_t = obj['motor_ticks']
 		# s_d = obj['scan_data']

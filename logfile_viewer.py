@@ -10,8 +10,14 @@ from slam_10_e_correction_answer import *
 from threading import Thread
 import Queue as queue
 import io
+from udp_sender import UdpSender
+import os
 # import sys
 
+# RECEIVER_IP = "localhost"
+RECEIVER_IP = "192.168.0.102"
+#RECEIVER_IP = "127.0.0.1"
+RECEIVER_PORT = 8998
 
 
 # The canvas and world extents of the scene.
@@ -28,9 +34,10 @@ max_scanner_range = 4000.0
 global draw_objects_single
 global fsp
 global fsp_q
+global img_q
 global filtered_positions
 global filtered_stddevs
-
+global img_running
 class DrawableObject(object):
     def draw(self, at_step):
         print "To be overwritten - will draw a certain point in time:", at_step
@@ -410,7 +417,9 @@ def draw_canvas():
         d.draw(0)
     # world_canvas.postscript(file="file_name.ps", colormode='color')
 
-    # ps = world_canvas.postscript(colormode='color')
+    ps = world_canvas.postscript(colormode='color')
+    global img_q
+    img_q.put(ps)
     # img = Image.open(io.BytesIO(ps.encode('utf-8')))
     # img.save('./test.jpg')
 
@@ -473,10 +482,16 @@ def load_data_single(fsp_data):
 
     filtered_stddev = fsp_data['E']
     filtered_stddevs.append(filtered_stddev)
-
+    
+    scan_data = fsp_data['S']
 
 
     # print("world_points len", len(world_points))
+    # Insert: scanner data.
+    test_positions=[]
+    test_positions.append(scan_data)
+    draw_objects_single.append(ScannerData(test_positions, sensor_canvas,
+        sensor_canvas_extents, max_scanner_range))
 
     if len(world_points):
                       
@@ -493,6 +508,7 @@ def load_data_single(fsp_data):
         # factor = canvas_extents[0] / world_extents[0]
         # draw_objects.append(Points(test_positions, world_canvas, "#00f2ff", 1))
         draw_objects_single.append(PolygonPoints(test_positions, world_canvas, "#00f2ff", 1))
+        
 
     if len(world_cylinders):
         # print("world_cylinders", world_cylinders)
@@ -753,6 +769,30 @@ def slam_thread(arg):
         else:
             fsp_q.put(fsp_data)
 
+def ping(ip):
+    response = os.system("ping -c 1 " + ip)
+    if response != 0:
+        print("Warning: Host {} is down!".format(ip))
+    else:
+        print("Ping OK")
+
+def slam_thread_img(arg):
+    global img_running
+    udp_sender = UdpSender()
+    ping(RECEIVER_IP)
+    print("streaming to {}:{}".format(RECEIVER_IP, RECEIVER_PORT))
+
+    while img_running:
+        while not img_q.empty():
+            ps = img_q.get()
+            img = Image.open(io.BytesIO(ps.encode('utf-8')))
+            data = io.BytesIO()
+            img.save(data, 'PNG')
+            udp_sender.send(data.getvalue(), (RECEIVER_IP, RECEIVER_PORT))
+
+            
+        time.sleep(0.5)
+
 
 
 # Main program.
@@ -868,10 +908,17 @@ if __name__ == '__main__':
     global fsp
     global fsp_q
     fsp_q = queue.Queue()
-    fsp = FastSlamProcessor()
-    thread = Thread(target = slam_thread, args = (10, ))
-    thread.start()
+    global img_q
+    img_q = queue.Queue()
 
+    fsp = FastSlamProcessor()
+    thread_fsp = Thread(target = slam_thread, args = (10, ))
+    thread_fsp.start()
+
+    global img_running
+    img_running = True
+    thread_img = Thread(target = slam_thread_img, args = (10, ))
+    thread_img.start()
     while True:
         try:
             root.update_idletasks()
@@ -901,8 +948,11 @@ if __name__ == '__main__':
             #     playback=False
         except KeyboardInterrupt:
             fsp.stop()
-            thread.join()
-            print"Bye!"
+            thread_fsp.join()
+            print"Bye thread_fsp!"
+            img_running = False
+            thread_img.join
+            print"Bye thread_img!"
             break
     root.destroy()
     sys.exit()

@@ -422,111 +422,119 @@ class FastSlamProcessor:
 
     def process(self):
         """ virtual method - Implementer must define protocol """
+        out_data = None
+        while True:
+            out_data = None
+            obj = self.json_server.get_data()
+            if not obj:
+                break
 
-        obj = self.json_server.get_data()
-        if not obj:
-            return None
-                # time.sleep(0.5)
-                # continue
+            print("point %d"%(self.i))
+            self.i += 1
 
-        print("point %d"%(self.i))
-        self.i += 1
+            m_t = obj['motor_ticks']
+            # print("m_t", m_t)
+            if self.first_motor_ticks:
+                self.first_motor_ticks = False
+                self.last_m_t = m_t
 
-        m_t = obj['motor_ticks']
-        # print("m_t", m_t)
-        if self.first_motor_ticks:
-            self.first_motor_ticks = False
+            print("m_t", m_t)
+            m_t_d=tuple([m_t[j]-self.last_m_t[j] for j in range(2)])
             self.last_m_t = m_t
-        m_t_d=tuple([m_t[j]-self.last_m_t[j] for j in range(2)])
-        self.last_m_t = m_t
 
-        s_d = obj['scan_data']
-        # print("s_d", s_d)
-        # print("len(s_d)",len(s_d))
+            if m_t_d[0]==0 and m_t_d[1]==0:
+                print("no move!")
+                continue
+            print("m_t_d", m_t_d)
+            s_d = obj['scan_data']
+            scan_data = s_d
+            # print("s_d", s_d)
+            # print("len(s_d)",len(s_d))
 
-        # if (i%10)==0:
-        #     print "Motor tick: ", i
-        # Prediction.
-        s_d = filter1(s_d)
-        subsampled_points = get_subsampled_points(s_d, 1)
-        control = map(lambda x: x * self.ticks_to_mm, m_t_d)
-        self.fs.predict(control)
+            # if (i%10)==0:
+            #     print "Motor tick: ", i
+            # Prediction.
+            s_d = filter1(s_d)
+            subsampled_points = get_subsampled_points(s_d, 1)
+            control = map(lambda x: x * self.ticks_to_mm, m_t_d)
+            self.fs.predict(control)
 
-        # Correction.
-        cylinders = get_cylinders_from_scan(s_d, self.depth_jump,
-            self.minimum_valid_distance, self.cylinder_offset, self.points_per_scan,
-            self.max_cylinder_d)
+            # Correction.
+            cylinders = get_cylinders_from_scan(s_d, self.depth_jump,
+                self.minimum_valid_distance, self.cylinder_offset, self.points_per_scan,
+                self.max_cylinder_d)
 
-        ransac = Ransac(s_d, cylinders, points_per_sector = 33,
-            min_distance = 300, inline_threshold=45,
-            attempts = 10, valid_threshold = 0.8)
-        ransac.try_merge_sectors()
+            ransac = Ransac(s_d, cylinders, points_per_sector = 66,
+                min_distance = 300, inline_threshold=20,
+                attempts = 10, valid_threshold = 0.9)
+            ransac.try_merge_sectors()
 
-        # scans_without_landmarks = get_scans_without_landmarks(
-        #     s_d, cylinders)
-        # print(scans_without_landmarks)
-        # write_cylinders(self.f_sub_scans, "SC", [(obs[0], obs[1])
-        #                            for obs in ransac.landmarks])
-        cylinders += ransac.landmarks
+            # scans_without_landmarks = get_scans_without_landmarks(
+            #     s_d, cylinders)
+            # print(scans_without_landmarks)
+            # write_cylinders(self.f_sub_scans, "SC", [(obs[0], obs[1])
+            #                            for obs in ransac.landmarks])
+            cylinders += ransac.landmarks
 
-        # write_cylinders(self.f, "D C", [(obs[1][0], obs[1][1])
-        #                         for obs in cylinders])
+            # write_cylinders(self.f, "D C", [(obs[1][0], obs[1][1])
+            #                         for obs in cylinders])
+            # write_walls(self.f, "D W", [(W[0][0], W[1][0], W[0][1], W[1][1])
+            #                                     for W in ransac.walls])
+            self.fs.correct(cylinders)
 
-        # write_walls(self.f, "D W", [(W[0][0], W[1][0], W[0][1], W[1][1])
-        #                                     for W in ransac.walls])
-        self.fs.correct(cylinders)
+            # Output particles.
+            # print_particles(self.fs.particles, self.f)
 
-        # Output particles.
-        # print_particles(self.fs.particles, self.f)
+            # Output state estimated from all particles.
+            mean = get_mean(self.fs.particles)
+            # print >> self.f, "F %.0f %.0f %.3f" %\
+            #         (mean[0] + self.scanner_displacement * cos(mean[2]),
+            #         mean[1] + self.scanner_displacement * sin(mean[2]),
+            #         mean[2])
+            out_mean = (mean[0] + self.scanner_displacement * cos(mean[2]),
+                    mean[1] + self.scanner_displacement * sin(mean[2]),
+                    mean[2])
+            # Output error ellipse and standard deviation of heading.
+            errors = get_error_ellipse_and_heading_variance(self.fs.particles, mean)
+            # print >> self.f, "E %.3f %.0f %.0f %.3f" % errors
 
-        # Output state estimated from all particles.
-        mean = get_mean(self.fs.particles)
-        # print >> self.f, "F %.0f %.0f %.3f" %\
-        #         (mean[0] + self.scanner_displacement * cos(mean[2]),
-        #         mean[1] + self.scanner_displacement * sin(mean[2]),
-        #         mean[2])
-        out_mean = (mean[0] + self.scanner_displacement * cos(mean[2]),
-                mean[1] + self.scanner_displacement * sin(mean[2]),
-                mean[2])
-        # Output error ellipse and standard deviation of heading.
-        errors = get_error_ellipse_and_heading_variance(self.fs.particles, mean)
-        # print >> self.f, "E %.3f %.0f %.0f %.3f" % errors
+            out_stddev = errors
 
-        out_stddev = errors
+            # Output landmarks of particle which is closest to the mean position.
+            output_particle = min([
+                (np.linalg.norm(mean[0:2] - self.fs.particles[j].pose[0:2]),j)
+                for j in xrange(len(self.fs.particles)) ])[1]
+            # Write estimates of landmarks.
+            # write_cylinders(self.f, "W C",
+            #                 self.fs.particles[output_particle].landmark_positions)
 
-        # Output landmarks of particle which is closest to the mean position.
-        output_particle = min([
-            (np.linalg.norm(mean[0:2] - self.fs.particles[j].pose[0:2]),j)
-            for j in xrange(len(self.fs.particles)) ])[1]
-        # Write estimates of landmarks.
-        # write_cylinders(self.f, "W C",
-        #                 self.fs.particles[output_particle].landmark_positions)
+            world_cylinders = self.fs.particles[output_particle].landmark_positions
+            # subsampled_points.append(self.fs.particles[output_particle].pose[0])
+            # subsampled_points.append(self.fs.particles[output_particle].pose[1])
 
-        world_cylinders = self.fs.particles[output_particle].landmark_positions
-        # subsampled_points.append(self.fs.particles[output_particle].pose[0])
-        # subsampled_points.append(self.fs.particles[output_particle].pose[1])
+            world_points = [LegoLogfile.scanner_to_world(mean, c)
+                            for c in subsampled_points]
+            world_points.append([mean[0], mean[1]])
 
-        world_points = [LegoLogfile.scanner_to_world(mean, c)
-                        for c in subsampled_points]
-        world_points.append([mean[0], mean[1]])
-
-        # write_cylinders(self.f, "W P", world_points)
-
-
-        detected_cylinders=[]
-        for obs in cylinders:
-            detected_cylinders.append((obs[1][0], obs[1][1]))
-
-        ransac_walls = [(W[0][0], W[1][0], W[0][1], W[1][1]) for W in ransac.walls]
+            # write_cylinders(self.f, "W P", world_points)
 
 
-        # Write covariance matrices.
-        # write_error_ellipses(self.f, "W E",
-        #                     self.fs.particles[output_particle].landmark_covariances)
-        world_ellipses = write_error_ellipses_tuple(self.fs.particles[output_particle].landmark_covariances)
-        out_data = {'W_P':world_points, 'D_C':detected_cylinders, 'D_W':ransac_walls, 'F':out_mean,
-            'E':out_stddev, 'W_C':world_cylinders, 'W_E':world_ellipses}
+            detected_cylinders=[]
+            for obs in cylinders:
+                detected_cylinders.append((obs[1][0], obs[1][1]))
+
+            ransac_walls = [(W[0][0], W[1][0], W[0][1], W[1][1]) for W in ransac.walls]
+
+
+            # Write covariance matrices.
+            # write_error_ellipses(self.f, "W E",
+            #                     self.fs.particles[output_particle].landmark_covariances)
+            world_ellipses = write_error_ellipses_tuple(self.fs.particles[output_particle].landmark_covariances)
+            out_data = {'W_P':world_points, 'D_C':detected_cylinders, 'D_W':ransac_walls, 'F':out_mean,
+                'E':out_stddev, 'W_C':world_cylinders, 'W_E':world_ellipses, 'S':scan_data}
+            break
         return out_data
+
     def stop(self):
         self.running = False
 
