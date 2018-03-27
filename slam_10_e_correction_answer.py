@@ -432,27 +432,23 @@ class FastSlamProcessor:
             print("point %d"%(self.i))
             self.i += 1
 
-            m_t = obj['motor_ticks']
-            # print("m_t", m_t)
+            m_t = obj[0]
             if self.first_motor_ticks:
                 self.first_motor_ticks = False
                 self.last_m_t = m_t
 
-            print("m_t", m_t)
             m_t_d=tuple([m_t[j]-self.last_m_t[j] for j in range(2)])
             self.last_m_t = m_t
 
             if m_t_d[0]==0 and m_t_d[1]==0:
                 print("no move!")
                 continue
-            print("m_t_d", m_t_d)
-            s_d = obj['scan_data']
+            # print("m_t_d", m_t_d)
+            s_d = obj[1]
             scan_data = s_d
             # print("s_d", s_d)
             # print("len(s_d)",len(s_d))
 
-            # if (i%10)==0:
-            #     print "Motor tick: ", i
             # Prediction.
             s_d = filter1(s_d)
             subsampled_points = get_subsampled_points(s_d, 1)
