@@ -36,6 +36,7 @@ global fsp
 global fsp_q
 global img_q
 global filtered_positions
+global filtered_stddev
 global filtered_stddevs
 global img_running
 class DrawableObject(object):
@@ -74,7 +75,8 @@ class Trajectory(DrawableObject):
                  standard_deviations = [],
                  point_size2 = 2,
                  background_color = "gray", cursor_color = "red",
-                 position_stddev_color = "green", theta_stddev_color = "#ffc0c0"):
+                 position_stddev_color = "green", theta_stddev_color = "red"):
+    # theta_stddev_color = "#ffc0c0"
         self.points = points
         self.standard_deviations = standard_deviations
         self.canvas = canvas
@@ -147,6 +149,7 @@ class Trajectory(DrawableObject):
                 if at_step < len(self.standard_deviations) and\
                    len(self.standard_deviations[0]) > 3:
                     angle = min(self.standard_deviations[at_step][3], pi)
+                    print("angle",angle)
                     points = self.get_ellipse_points(p, p[2], 30.0, 30.0,
                                                      -angle, angle)
                     points = [p[0:2]] + points + [p[0:2]]
@@ -324,14 +327,17 @@ class PolygonPoints(DrawableObject):
         if self.cursor_objects:
             map(self.canvas.delete, self.cursor_objects)
             self.cursor_objects = []
-        if at_step < len(self.points):
+        # angle = min(filtered_stddev[3], pi)
+        angle = 0
+
+        if at_step < len(self.points) and angle < 0.1:
             # self.scan_polygon=[]
             arena_scan_image = Image.new('RGBA', canvas_extents)
             draw = ImageDraw.Draw(arena_scan_image)
 
-            for i in xrange(len(self.points[at_step])):
+            # for i in xrange(len(self.points[at_step])):
                 # Draw point.
-                c = self.points[at_step][i]
+                # c = self.points[at_step][i]
                 # draw.ellipse((c[0]-2, c[1]-2, c[0]+2, c[1]+2), fill=(0,0,255,100))
             # self.cursor_objects.append(self.canvas.create_polygon(self.points[at_step], fill="blue"))
             # arena_scan_image = Image.new("RGB", canvas_extents, (0, 0, 0))
@@ -339,7 +345,7 @@ class PolygonPoints(DrawableObject):
 
             # 0,0,0 - black
             # 255,255,255 - white
-            draw.polygon(self.points[at_step],fill=(255,255,255,20), outline = (255,255,255,20))
+            draw.polygon(self.points[at_step],fill=(255,255,255,5), outline = (255,255,255,5))
 
             self.background_image.paste(arena_scan_image, (0,0), arena_scan_image)
             global photo
@@ -353,7 +359,7 @@ class PolygonPoints(DrawableObject):
             # image = Image.alpha_composite(image, arena_scan_image)
             photo = ImageTk.PhotoImage(image)
             
-            self.cursor_objects.append(self.canvas.create_rectangle(((0, 0), canvas_extents), fill="white"))
+            # self.cursor_objects.append(self.canvas.create_rectangle(((0, 0), canvas_extents), fill="white"))
             self.cursor_objects.append(self.canvas.create_image(canvas_extents[0]/2, canvas_extents[1]/2, image=photo))
             # image.save("slam1.bmp")
 
@@ -361,9 +367,9 @@ class PolygonPoints(DrawableObject):
             # draw.line(cos_list, red)
             # PIL image can be saved as .png .jpg .gif or .bmp file
             # filename = "my_drawing.bmp"
-            filename = "my_drawing.png"
+            # filename = "my_drawing.png"
             # arena_scan_image.save(filename)
-            self.background_image.save(filename, 'PNG')
+            # self.background_image.save(filename, 'PNG')
 
 
 # Particles are like points but add a direction vector.
@@ -469,6 +475,7 @@ def load_data_single(fsp_data):
     global draw_objects_single
     global filtered_positions
     global filtered_stddevs
+    global filtered_stddev
 
     draw_objects_single=[]
     world_points = fsp_data['W_P']
@@ -582,8 +589,10 @@ def load_data_single(fsp_data):
         # If there is error ellipses, insert them as well.
         draw_objects_single.append(Trajectory(positions, world_canvas, world_extents, canvas_extents,
             standard_deviations = filtered_stddevs,
-            cursor_color="blue", background_color="lightblue",
-            position_stddev_color = "#8080ff", theta_stddev_color="#c0c0ff"))
+            # cursor_color="blue", background_color="lightblue",
+            cursor_color="blue", background_color="blue",
+            position_stddev_color = "red", theta_stddev_color="black"))
+            # position_stddev_color = "#8080ff", theta_stddev_color="#c0c0ff"))
     world_canvas.delete(ALL)
     sensor_canvas.delete(ALL)
     # for d in draw_objects_single:

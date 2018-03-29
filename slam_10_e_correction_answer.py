@@ -370,7 +370,7 @@ class FastSlamProcessor:
         # robot_width = 155.0
         self.scanner_displacement = 0
         self.ticks_to_mm = 1.037
-        self.robot_width = 300
+        self.robot_width = 400
 
         # Cylinder extraction and matching constants.
         self.minimum_valid_distance = 20.0
@@ -380,10 +380,10 @@ class FastSlamProcessor:
         self.max_cylinder_d = 250
 
         # Filter constants.
-        self.control_motion_factor = 0.7  # Error in motor control.
+        self.control_motion_factor = 1.0  # Error in motor control.
         self.control_turn_factor = 2.0  # Additional error due to slip when turning.
         self.measurement_distance_stddev = 200.0  # Distance measurement error of cylinders.
-        self.measurement_angle_stddev = 15.0 / 180.0 * pi  # Angle measurement error.
+        self.measurement_angle_stddev = 8.0 / 180.0 * pi  # Angle measurement error.
         self.minimum_correspondence_likelihood = 0.001  # Min likelihood of correspondence.
 
         # Generate initial particles. Each particle is (x, y, theta).
@@ -395,7 +395,7 @@ class FastSlamProcessor:
         # gym_4
         # start_state = np.array([2700, 2500.0, 250.0 / 180.0 * pi])
         # test_8
-        self.start_state = np.array([2000, 2000.0, 325.0 / 180.0 * pi])
+        self.start_state = np.array([3000, 3000.0, 0.0 / 180.0 * pi])
 
         self.initial_particles = [copy.copy(Particle(self.start_state))
                          for _ in xrange(self.number_of_particles)]
